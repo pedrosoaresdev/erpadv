@@ -1,0 +1,64 @@
+rules_version = '2';
+
+// ERPAdv — Security Rules do Cloud Firestore
+//
+// Modelo: o backend Java (Firebase Admin SDK, que ignora estas regras) é a única via de
+// escrita e a via principal de leitura. O navegador só pode:
+//   • ler o próprio perfil (users/{uid});
+//   • ler/marcar como lidas as próprias notificações (listener em tempo real).
+// Todo o resto é negado. Isso garante isolamento entre escritórios e entre clientes mesmo
+// que alguém use o SDK web diretamente com um token válido.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function sameOffice(officeId) {
+      return signedIn()
+        && request.auth.token.officeId is string
+        && request.auth.token.officeId == officeId;
+    }
+
+    function isStaff() {
+      return request.auth.token.role is string
+        && request.auth.token.role != 'CLIENTE';
+    }
+
+    match /users/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list, write: if false;
+    }
+
+    match /offices/{officeId} {
+      // Dados cadastrais do próprio escritório (nome, logo) — somente equipe interna.
+      allow get: if sameOffice(officeId) && isStaff();
+      allow list, write: if false;
+
+      match /notifications/{notificationId} {
+        allow get: if sameOffice(officeId)
+          && resource.data.recipientUid == request.auth.uid;
+        // Consultas precisam filtrar pelo próprio uid para serem aceitas.
+        allow list: if sameOffice(officeId)
+          && resource.data.recipientUid == request.auth.uid;
+        // Único campo alterável pelo cliente: marcação de leitura.
+        allow update: if sameOffice(officeId)
+          && resource.data.recipientUid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt'])
+          && request.resource.data.read is bool;
+        allow create, delete: if false;
+      }
+
+      // Qualquer outra subcoleção (clients, cases, documents, audit_logs, ...): negado.
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

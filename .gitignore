@@ -1,0 +1,32 @@
+# Dependências e builds
+node_modules/
+dist/
+target/
+.angular/
+*.log
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+pubsub-debug.log
+database-debug.log
+
+# Segredos — nunca versionar
+.env
+.env.*
+!.env.example
+secrets/
+docker/certs/
+*service-account*.json
+*-firebase-adminsdk-*.json
+
+# IDE / SO
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.iml
+.DS_Store
+Thumbs.db
+
+# Locais
+.tmp-ud/
+.claude/

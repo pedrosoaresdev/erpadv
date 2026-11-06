@@ -1,0 +1,78 @@
+spring:
+  application:
+    name: erpadv-backend
+  threads:
+    virtual:
+      enabled: true
+  jackson:
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: false
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 30MB
+
+server:
+  port: ${SERVER_PORT:8085}
+  forward-headers-strategy: native
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-message: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      group:
+        readiness:
+          include: readinessState,firestore
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: ERPAdv
+    version: 0.1.0
+
+app:
+  firebase:
+    project-id: ${FIREBASE_PROJECT_ID:demo-erpadv}
+    # Caminho do JSON da service account (montado como volume/secret, nunca dentro da imagem).
+    # Vazio = Application Default Credentials (GOOGLE_APPLICATION_CREDENTIALS ou metadata server).
+    credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
+    storage-bucket: ${FIREBASE_STORAGE_BUCKET:demo-erpadv.appspot.com}
+    # true quando FIRESTORE_EMULATOR_HOST / FIREBASE_AUTH_EMULATOR_HOST apontam para o Emulator Suite
+    emulator: ${FIREBASE_USE_EMULATOR:false}
+    emulator-public-auth-url: ${FIREBASE_EMULATOR_PUBLIC_AUTH_URL:}
+  security:
+    # Chave AES-256 (base64, 32 bytes) para criptografar CPF/CNPJ/RG. Obrigatória.
+    data-encryption-key: ${DATA_ENCRYPTION_KEY:}
+    # Chave HMAC (base64, >= 32 bytes) para tokens de busca de dados sensíveis. Obrigatória.
+    search-hmac-key: ${SEARCH_HMAC_KEY:}
+    rate-limit-per-minute: ${RATE_LIMIT_PER_MINUTE:300}
+    profile-cache-seconds: ${PROFILE_CACHE_SECONDS:60}
+    require-email-verified: ${REQUIRE_EMAIL_VERIFIED:true}
+    # Recusa iniciar com as chaves de desenvolvimento publicadas no .env.example
+    production: ${APP_PRODUCTION:false}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+
+logging:
+  level:
+    root: INFO
+    br.com.erpadv: INFO
+    AUDIT: INFO

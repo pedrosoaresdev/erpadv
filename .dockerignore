@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/target
+**/.angular
+**/.git
+**/*.log
+.env
+secrets
+docker/certs
+.tmp-ud
+firebase/node_modules

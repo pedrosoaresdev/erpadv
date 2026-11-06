@@ -1,0 +1,101 @@
+<div class="shell" [class.collapsed]="collapsed() && !isMobile()" [class.mobile]="isMobile()" [class.mobile-open]="mobileOpen()">
+  <aside class="sidebar" aria-label="Menu principal">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 64 64"><path d="M32 12v40M18 22h28M18 22l-7 14a7 7 0 0 0 14 0zM46 22l-7 14a7 7 0 0 0 14 0zM24 52h16" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="brand-text">
+        <span class="brand-name brand-serif">ERPAdv</span>
+        <span class="brand-office">{{ auth.me()?.officeName }}</span>
+      </div>
+    </div>
+
+    <nav class="nav">
+      @for (section of sections(); track section.title) {
+        <div class="nav-section">{{ section.title }}</div>
+        @for (item of section.items; track item.label) {
+          @if (item.route) {
+            <a class="nav-item" [routerLink]="item.route" routerLinkActive="active"
+               [matTooltip]="item.label" [matTooltipDisabled]="!collapsed() || isMobile()" matTooltipPosition="right">
+              <mat-icon>{{ item.icon }}</mat-icon><span class="label">{{ item.label }}</span>
+            </a>
+          } @else {
+            <div class="nav-item disabled" [matTooltip]="stageTooltip(item)" matTooltipPosition="right" aria-disabled="true">
+              <mat-icon>{{ item.icon }}</mat-icon><span class="label">{{ item.label }}</span>
+              <span class="stage">E{{ item.stage }}</span>
+            </div>
+          }
+        }
+      }
+    </nav>
+
+    <div class="sidebar-footer">
+      <span class="label">© {{ year }} ERPAdv · sigilo profissional</span>
+    </div>
+  </aside>
+
+  @if (isMobile() && mobileOpen()) {
+    <div class="backdrop" (click)="mobileOpen.set(false)" aria-hidden="true"></div>
+  }
+
+  <div class="main">
+    <header class="topbar">
+      <button mat-icon-button (click)="toggleSidebar()" aria-label="Recolher menu" matTooltip="Recolher/expandir menu">
+        <mat-icon>{{ isMobile() ? 'menu' : (collapsed() ? 'menu_open' : 'menu') }}</mat-icon>
+      </button>
+      <app-global-search class="search-slot" />
+      <span class="spacer"></span>
+
+      <button mat-icon-button (click)="theme.toggle()" [matTooltip]="theme.mode() === 'dark' ? 'Tema claro' : 'Tema escuro'" aria-label="Alternar tema">
+        <mat-icon>{{ theme.mode() === 'dark' ? 'light_mode' : 'dark_mode' }}</mat-icon>
+      </button>
+
+      <button mat-icon-button [matMenuTriggerFor]="notifMenu" aria-label="Notificações" matTooltip="Notificações">
+        <mat-icon [matBadge]="notifications.unread() || null" matBadgeSize="small" matBadgeColor="warn" aria-hidden="false">notifications</mat-icon>
+      </button>
+      <mat-menu #notifMenu="matMenu" xPosition="before" class="notif-menu">
+        <div class="notif-head" (click)="$event.stopPropagation()">
+          <strong>Notificações</strong>
+          @if (notifications.unread()) {
+            <button mat-button (click)="notifications.markAllRead()">Marcar todas como lidas</button>
+          }
+        </div>
+        @for (n of notifications.items(); track n.id) {
+          <button mat-menu-item class="notif" [class.unread]="!n.read" (click)="openNotification(n)">
+            <div class="notif-title">{{ n.title }}</div>
+            <div class="notif-body">{{ n.body }}</div>
+            <div class="notif-time">{{ n.createdAt | relative }}</div>
+          </button>
+        } @empty {
+          <div class="notif-empty" (click)="$event.stopPropagation()">
+            <mat-icon>notifications_none</mat-icon>
+            {{ notifications.error() ? 'Não foi possível carregar as notificações.' : 'Nenhuma notificação por aqui.' }}
+          </div>
+        }
+      </mat-menu>
+
+      <button class="user-btn" [matMenuTriggerFor]="userMenu" aria-label="Menu do usuário">
+        <span class="avatar">{{ auth.initials() }}</span>
+        <span class="user-text">
+          <span class="user-name">{{ auth.displayName() }}</span>
+          <span class="user-role">{{ auth.me()?.roleLabel }}</span>
+        </span>
+        <mat-icon>expand_more</mat-icon>
+      </button>
+      <mat-menu #userMenu="matMenu" xPosition="before">
+        <div class="menu-profile" (click)="$event.stopPropagation()">
+          <strong>{{ auth.displayName() }}</strong>
+          <span class="muted">{{ auth.user()?.email }}</span>
+          <span class="badge gold">{{ auth.me()?.roleLabel }}</span>
+        </div>
+        <mat-divider />
+        <button mat-menu-item (click)="theme.toggle()"><mat-icon>contrast</mat-icon>Alternar tema</button>
+        <button mat-menu-item (click)="logout()"><mat-icon>logout</mat-icon>Sair</button>
+      </mat-menu>
+    </header>
+
+    <main class="content">
+      <router-outlet />
+    </main>
+  </div>
+</div>

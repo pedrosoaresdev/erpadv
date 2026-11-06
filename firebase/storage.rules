@@ -1,0 +1,15 @@
+rules_version = '2';
+
+// ERPAdv — Security Rules do Firebase Storage
+//
+// Arquivos jurídicos são sigilosos. Upload e download acontecem exclusivamente pelo backend
+// (Admin SDK), que valida tipo/tamanho/assinatura do arquivo, aplica RBAC e registra o
+// acesso na trilha de auditoria. Nenhum acesso direto do navegador é permitido.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,63 @@
+# ERPAdv — produção com projeto Firebase real.
+#   1. cp .env.example .env  (preencha com valores reais e chaves próprias)
+#   2. coloque o JSON da service account em ./secrets/firebase-service-account.json (fora do git)
+#   3. coloque o certificado TLS em ./docker/certs/tls.crt e tls.key
+#   4. docker compose -f docker-compose.prod.yml up -d --build
+
+name: erpadv-prod
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "10"
+
+services:
+  backend:
+    build: ./backend
+    env_file: .env
+    environment:
+      FIREBASE_USE_EMULATOR: "false"
+      FIREBASE_CREDENTIALS_PATH: /run/secrets/firebase_service_account
+      APP_PRODUCTION: "true"
+    secrets:
+      - firebase_service_account
+    expose: ["8085"]
+    networks: [erpadv]
+    restart: always
+    read_only: true
+    tmpfs: ["/tmp"]
+    security_opt: ["no-new-privileges:true"]
+    logging: *default-logging
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    env_file: .env
+    environment:
+      BACKEND_UPSTREAM: backend:8085
+      HTTPS_PUBLIC_PORT: "443"
+      CSP_CONNECT_SRC: >-
+        https://*.googleapis.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com
+        https://firestore.googleapis.com wss://*.firebaseio.com
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/certs:/etc/nginx/certs:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [erpadv]
+    restart: always
+    security_opt: ["no-new-privileges:true"]
+    logging: *default-logging
+
+secrets:
+  firebase_service_account:
+    file: ./secrets/firebase-service-account.json
+
+networks:
+  erpadv:
+    driver: bridge

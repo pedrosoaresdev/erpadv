@@ -1,0 +1,93 @@
+# ERPAdv — ambiente completo de desenvolvimento com Firebase Emulator Suite.
+#   docker compose up --build
+# Acesse https://localhost:8443 (certificado autoassinado de desenvolvimento).
+# Produção (Firebase real): docker compose -f docker-compose.prod.yml up -d --build
+
+name: erpadv
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  firebase-emulator:
+    build:
+      context: .
+      dockerfile: docker/firebase-emulator/Dockerfile
+    environment:
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-demo-erpadv}
+    ports:
+      - "${EMULATOR_UI_PORT:-4000}:4000"
+      - "${EMULATOR_AUTH_PORT:-9099}:9099"
+      - "${EMULATOR_FIRESTORE_PORT:-8080}:8080"
+      - "${EMULATOR_STORAGE_PORT:-9199}:9199"
+    volumes:
+      - emulator-data:/data
+    networks: [erpadv]
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  backend:
+    build: ./backend
+    environment:
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-demo-erpadv}
+      FIREBASE_STORAGE_BUCKET: ${FIREBASE_STORAGE_BUCKET:-demo-erpadv.appspot.com}
+      FIREBASE_USE_EMULATOR: "true"
+      FIRESTORE_EMULATOR_HOST: firebase-emulator:8080
+      FIREBASE_AUTH_EMULATOR_HOST: firebase-emulator:9099
+      FIREBASE_EMULATOR_PUBLIC_AUTH_URL: http://localhost:${EMULATOR_AUTH_PORT:-9099}
+      # Chaves de DESENVOLVIMENTO (as mesmas do .env.example). Em produção use chaves próprias.
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-ZGV2LW9ubHkta2V5LWNoYW5nZS1tZS0zMi1ieXRlcyE=}
+      SEARCH_HMAC_KEY: ${SEARCH_HMAC_KEY:-ZGV2LW9ubHktaG1hYy1rZXktY2hhbmdlLW1lLTMyYnl0ZXM=}
+      REQUIRE_EMAIL_VERIFIED: ${REQUIRE_EMAIL_VERIFIED:-false}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-300}
+      CORS_ALLOWED_ORIGINS: https://localhost:${HTTPS_PORT:-8443}
+      APP_PRODUCTION: "false"
+    expose: ["8085"]
+    depends_on:
+      firebase-emulator:
+        condition: service_healthy
+    networks: [erpadv]
+    restart: unless-stopped
+    logging: *default-logging
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      BACKEND_UPSTREAM: backend:8085
+      HTTPS_PUBLIC_PORT: ${HTTPS_PORT:-8443}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-demo-erpadv}
+      FIREBASE_WEB_API_KEY: ${FIREBASE_WEB_API_KEY:-demo-api-key}
+      FIREBASE_AUTH_DOMAIN: ${FIREBASE_AUTH_DOMAIN:-demo-erpadv.firebaseapp.com}
+      FIREBASE_STORAGE_BUCKET: ${FIREBASE_STORAGE_BUCKET:-demo-erpadv.appspot.com}
+      FIREBASE_MESSAGING_SENDER_ID: ${FIREBASE_MESSAGING_SENDER_ID:-000000000000}
+      FIREBASE_APP_ID: ${FIREBASE_APP_ID:-1:000000000000:web:0000000000000000}
+      EMULATOR_AUTH_URL: http://localhost:${EMULATOR_AUTH_PORT:-9099}
+      EMULATOR_FIRESTORE_HOST: localhost
+      EMULATOR_FIRESTORE_PORT: ${EMULATOR_FIRESTORE_PORT:-8080}
+      CSP_CONNECT_SRC: >-
+        http://localhost:${EMULATOR_AUTH_PORT:-9099} http://localhost:${EMULATOR_FIRESTORE_PORT:-8080}
+        ws://localhost:${EMULATOR_FIRESTORE_PORT:-8080} https://*.googleapis.com
+    ports:
+      - "${HTTP_PORT:-8000}:80"
+      - "${HTTPS_PORT:-8443}:443"
+    volumes:
+      - tls-certs:/etc/nginx/certs
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [erpadv]
+    restart: unless-stopped
+    logging: *default-logging
+
+networks:
+  erpadv:
+    driver: bridge
+
+volumes:
+  emulator-data:
+  tls-certs:
