@@ -36,6 +36,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.security.require-email-verified=false",
         "app.security.data-encryption-key=ZGV2LW9ubHkta2V5LWNoYW5nZS1tZS0zMi1ieXRlcyE=",
         "app.security.search-hmac-key=ZGV2LW9ubHktaG1hYy1rZXktY2hhbmdlLW1lLTMyYnl0ZXM=",
+        "app.jobs.enabled=true",
+        "app.jobs.deadline-alerts-cron=0 0 0 1 1 *",
+        "app.jobs.appointment-reminders-ms=86400000",
         "app.security.profile-cache-seconds=1"
 })
 @AutoConfigureMockMvc
@@ -47,6 +50,12 @@ class EmulatorEndToEndTest {
 
     @Autowired
     MockMvc mvc;
+
+    @Autowired
+    br.com.erpadv.services.ReminderJobs jobs;
+
+    @Autowired
+    com.google.cloud.firestore.Firestore firestore;
 
     @Test
     void fluxoCompletoComIsolamentoEntreEscritorios() throws Exception {
@@ -143,7 +152,72 @@ class EmulatorEndToEndTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].hash").isNotEmpty());
 
-        // 7. Convite de funcionário (estagiário) e bloqueio
+        // 7. Etapa 9 — calendário forense, cálculo, prazos, alertas e agenda
+        String officeA = me.get("officeId").asText();
+        mvc.perform(post("/api/court-calendar").header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"startDate\":\"2030-03-11\",\"description\":\"Feriado municipal\",\"kind\":\"FERIADO\"}"))
+                .andExpect(status().isCreated());
+        mvc.perform(post("/api/deadlines/calculate").header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"startDate\":\"2030-03-08\",\"days\":1,\"countingMode\":\"UTEIS\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dueDate").value("2030-03-12"));
+
+        java.time.LocalDate today = br.com.erpadv.services.DeadlineService.today();
+        JsonNode deadline = body(mvc.perform(post("/api/deadlines").header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(JSON.writeValueAsString(Map.of(
+                                "caseId", caseId, "description", "Réplica à contestação", "type", "REPLICA",
+                                "startDate", today.toString(), "dueDate", today.plusDays(4).toString(),
+                                "countingMode", "MANUAL", "responsibleUid", uidA, "priority", "ALTA"))))
+                .andExpect(status().isCreated()).andReturn());
+        String deadlineId = deadline.get("id").asText();
+        assertThat(deadline.get("clientName").asText()).isEqualTo("João da Conceição");
+        assertThat(deadline.get("validated").asBoolean()).isFalse();
+        mvc.perform(post("/api/deadlines/" + deadlineId + "/validate").header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.validated").value(true));
+        mvc.perform(get("/api/deadlines").param("view", "PENDENTES").header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].id").value(deadlineId));
+        mvc.perform(get("/api/deadlines/stats").header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.upcoming").value(1));
+
+        assertThat(jobs.sendDeadlineAlerts(today)).isGreaterThanOrEqualTo(1);
+        assertThat(jobs.sendDeadlineAlerts(today)).isZero(); // idempotente
+        long alerts = firestore.collection("offices").document(officeA).collection("notifications")
+                .whereEqualTo("recipientUid", uidA).whereEqualTo("type", "DEADLINE_ALERT").get().get().size();
+        assertThat(alerts).isEqualTo(1);
+
+        java.time.Instant hearingStart = java.time.Instant.now().plus(java.time.Duration.ofMinutes(30));
+        JsonNode appointment = body(mvc.perform(post("/api/calendar/appointments").header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(JSON.writeValueAsString(Map.of(
+                                "type", "AUDIENCIA", "title", "Audiência de conciliação",
+                                "start", hearingStart.toString(), "end", hearingStart.plusSeconds(3600).toString(),
+                                "responsibleUids", java.util.List.of(uidA), "caseId", caseId,
+                                "reminders", java.util.List.of(60, 1440)))))
+                .andExpect(status().isCreated()).andReturn());
+        String appointmentId = appointment.get("id").asText();
+        mvc.perform(get("/api/calendar/events")
+                        .param("from", java.time.Instant.now().minusSeconds(86400).toString())
+                        .param("to", java.time.Instant.now().plus(java.time.Duration.ofDays(15)).toString())
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.kind == 'APPOINTMENT')]").isNotEmpty())
+                .andExpect(jsonPath("$[?(@.kind == 'DEADLINE')]").isNotEmpty());
+        assertThat(jobs.sendAppointmentReminders(java.time.Instant.now())).isEqualTo(1);
+        assertThat(jobs.sendAppointmentReminders(java.time.Instant.now())).isZero();
+
+        mvc.perform(get("/api/deadlines/" + deadlineId).header("Authorization", "Bearer " + tokenB))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/api/deadlines/" + deadlineId + "/complete").header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"note\":\"Protocolada\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CONCLUIDO"));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/calendar/appointments/" + appointmentId).header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isNoContent());
+
+        // 8. Convite de funcionário (estagiário) e bloqueio
         JsonNode invite = body(mvc.perform(post("/api/employees").header("Authorization", "Bearer " + tokenA)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"estagiario-" + UUID.randomUUID() + "@escritorio-a.test\","

@@ -21,8 +21,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Dashboard', icon: 'space_dashboard', route: '/dashboard', permission: 'DASHBOARD_VIEW' },
       { label: 'Clientes', icon: 'groups', route: '/clientes', permission: 'CLIENTS_READ' },
       { label: 'Processos', icon: 'gavel', route: '/processos', permission: 'CASES_READ' },
-      { label: 'Prazos', icon: 'alarm', permission: 'DEADLINES_READ', stage: 9 },
-      { label: 'Agenda', icon: 'calendar_month', permission: 'CALENDAR_READ', stage: 9 },
+      { label: 'Prazos', icon: 'alarm', route: '/prazos', permission: 'DEADLINES_READ' },
+      { label: 'Agenda', icon: 'calendar_month', route: '/agenda', permission: 'CALENDAR_READ' },
     ],
   },
   {

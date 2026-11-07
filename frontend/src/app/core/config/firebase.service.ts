@@ -8,7 +8,7 @@ import { ConfigService } from './config.service';
 @Injectable({ providedIn: 'root' })
 export class FirebaseService {
   private readonly config = inject(ConfigService);
-  private app!: FirebaseApp;
+  app!: FirebaseApp;
   auth!: Auth;
   firestore!: Firestore;
 

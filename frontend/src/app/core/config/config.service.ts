@@ -10,6 +10,10 @@ import type { FirebaseOptions } from 'firebase/app';
 export interface AppConfig {
   apiUrl: string;
   firebase: FirebaseOptions;
+  messaging?: {
+    /** Chave pública VAPID (Web Push) do projeto Firebase. */
+    vapidKey?: string;
+  };
   emulators?: {
     authUrl?: string;
     firestoreHost?: string;

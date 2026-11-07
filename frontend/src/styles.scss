@@ -150,6 +150,7 @@ mat-form-field { width: 100%; }
 .mat-mdc-dialog-container .mat-mdc-dialog-surface { border-radius: 16px !important; }
 .dialog-title { display: flex; align-items: center; gap: 10px; }
 .dialog-title .mat-icon { color: var(--app-gold); }
+.mat-mdc-dialog-content > form { padding-top: 8px; }
 
 /* --------------------------------------------------------------- snackbars */
 .snack-error { --mat-snack-bar-container-color: #7a1c14; --mat-snack-bar-supporting-text-color: #fff; --mat-snack-bar-button-color: #fff; }

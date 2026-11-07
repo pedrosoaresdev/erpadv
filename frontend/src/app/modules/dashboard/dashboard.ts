@@ -2,6 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
+import { RouterLink } from '@angular/router';
 import { ChartConfiguration } from 'chart.js';
 import { ApiService } from '../../core/api/api.service';
 import { AuthService } from '../../core/auth/auth.service';
@@ -22,7 +23,7 @@ const iso = (d: Date) =>
 @Component({
   selector: 'app-dashboard',
   imports: [
-    MatButtonModule, MatButtonToggleModule, MatIconModule, PageHeaderComponent, StatCardComponent,
+    RouterLink, MatButtonModule, MatButtonToggleModule, MatIconModule, PageHeaderComponent, StatCardComponent,
     ChartComponent, LoadingComponent, EmptyStateComponent,
   ],
   template: `
@@ -49,6 +50,17 @@ const iso = (d: Date) =>
             [hint]="d.cases.closed + ' encerrados · ' + d.cases.archived + ' arquivados'" />
           <app-stat-card label="Clientes inadimplentes" [value]="d.clients.defaulting" icon="report"
             [hint]="d.clients.defaulting ? 'Requer atenção do financeiro' : 'Nenhuma pendência'" [tone]="d.clients.defaulting ? 'danger' : 'success'" />
+        </section>
+
+        <section class="kpis second">
+          <a class="kpi-link" routerLink="/prazos"><app-stat-card label="Prazos que vencem hoje" [value]="d.deadlines.dueToday" icon="today"
+            [tone]="d.deadlines.dueToday ? 'danger' : 'success'" [hint]="d.deadlines.urgent + ' urgentes nos próximos 3 dias'" /></a>
+          <a class="kpi-link" routerLink="/prazos"><app-stat-card label="Prazos vencidos" [value]="d.deadlines.overdue" icon="event_busy"
+            [tone]="d.deadlines.overdue ? 'danger' : 'success'" [hint]="d.deadlines.overdue ? 'Pendentes após o vencimento' : 'Nenhum prazo vencido'" /></a>
+          <a class="kpi-link" routerLink="/prazos"><app-stat-card label="Prazos futuros" [value]="d.deadlines.upcoming" icon="event_upcoming"
+            [hint]="d.deadlines.unvalidated + ' aguardando validação · ' + d.deadlines.completedInPeriod + ' cumpridos no período'" /></a>
+          <a class="kpi-link" routerLink="/agenda"><app-stat-card label="Audiências (30 dias)" [value]="d.hearings.next30Days" icon="gavel"
+            hint="Próximas audiências agendadas" /></a>
         </section>
 
         <section class="pending">
@@ -79,6 +91,10 @@ const iso = (d: Date) =>
             <app-chart [config]="newCasesChart()" [height]="260" />
           </div>
           <div class="card card-pad">
+            <div class="card-title"><mat-icon>event</mat-icon>Audiências por mês</div>
+            <app-chart [config]="hearingsChart()" [height]="260" />
+          </div>
+          <div class="card card-pad">
             <div class="card-title"><mat-icon>workspace_premium</mat-icon>Carteira ativa por advogado</div>
             @if (d.productivity.length) {
               <app-chart [config]="productivityChart()" [height]="260" />
@@ -92,6 +108,8 @@ const iso = (d: Date) =>
   `,
   styles: `
     .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+    .kpis.second { margin-top: 16px; }
+    .kpi-link { text-decoration: none; color: inherit; display: block; border-radius: var(--app-radius); }
     .pending { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 8px; }
     .pending-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--app-text-muted);
       border: 1px dashed var(--app-border); padding: 6px 10px; border-radius: 8px; }
@@ -169,6 +187,18 @@ export class DashboardComponent {
       data: {
         labels: items.map((p) => fmtMonth(p.month)),
         datasets: [{ label: 'Novos processos', data: items.map((p) => p.value), backgroundColor: CHART_COLORS[0], borderRadius: 6 }],
+      },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } } },
+    };
+  });
+
+  readonly hearingsChart = computed<ChartConfiguration>(() => {
+    const items = this.data()?.hearings.byMonth ?? [];
+    return {
+      type: 'bar',
+      data: {
+        labels: items.map((p) => fmtMonth(p.month)),
+        datasets: [{ label: 'Audiências', data: items.map((p) => p.value), backgroundColor: '#b42318', borderRadius: 6 }],
       },
       options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } } },
     };

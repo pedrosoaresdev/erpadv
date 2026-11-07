@@ -51,11 +51,18 @@ Documentação: [arquitetura e fluxo de autenticação](docs/ARQUITETURA.md) ·
   inativação, inadimplência, atendimentos, processos vinculados.
 * **Processos**: CNJ validado, partes, juízo, responsável, valor, situação, movimentações,
   decisões, despachos, linha do tempo, arquivamento, filtros, restrição criminal/sigilosa.
+* **Prazos**: contagem sugerida em dias úteis (CPC, arts. 219, 220 e 224 — feriados nacionais e
+  móveis, recesso de 20/12 a 20/01) ou corridos com prorrogação, feriados locais e suspensões por
+  tribunal, validação obrigatória pelo advogado responsável, indicadores (hoje, urgentes, futuros,
+  vencidos, concluídos) e alertas automáticos 10, 5, 3 e 1 dia antes e no dia do vencimento.
+* **Agenda**: audiências, reuniões, consultas, julgamentos, sustentações orais, compromissos e
+  atividades internas em visões dia/semana/mês, com prazos sobrepostos, responsáveis, vínculo com
+  cliente/processo, lembretes e notificações (tempo real + push FCM).
 * **Equipe**: papéis e permissões granulares por usuário.
 * **Auditoria**: trilha imutável encadeada por hash, com verificação de integridade.
 * **Busca global**, **notificações em tempo real**, **tema claro/escuro**, **sidebar recolhível**.
 
-Prazos, agenda, financeiro, contratos, documentos, criminal, IA, portal do cliente, relatórios e
+Financeiro, contratos, documentos, criminal, IA, portal do cliente, relatórios e
 painel master aparecem na sidebar com a etapa prevista.
 
 ## Produção com Firebase real
@@ -64,7 +71,8 @@ painel master aparecem na sidebar com a etapa prevista.
    **Authentication → E-mail/senha**, **Cloud Firestore** (modo produção) e **Storage**.
 2. Publique regras e índices: `cd firebase && npx firebase deploy --only firestore,storage --project <id>`.
 3. Em *Configurações do projeto → Geral*, registre um app Web e copie a configuração pública para o `.env`
-   (`FIREBASE_WEB_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_APP_ID`, …).
+   (`FIREBASE_WEB_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_APP_ID`, …). Para push, gere em
+   *Cloud Messaging → Certificados push da Web* a chave e preencha `FIREBASE_VAPID_KEY`.
 4. Em *Contas de serviço*, gere uma chave privada e salve em `secrets/firebase-service-account.json`
    (pasta ignorada pelo git; montada como Docker secret, nunca copiada para a imagem).
 5. Gere chaves próprias: `openssl rand -base64 32` (DATA_ENCRYPTION_KEY) e `openssl rand -base64 48`
@@ -85,7 +93,7 @@ cd frontend && npm install && npm start                  # http://localhost:4200
 
 | Suíte | Comando | O que cobre |
 |---|---|---|
-| Backend unitário + segurança | `cd backend && mvn test` | CPF/CNPJ/CNJ, criptografia, RBAC, cadeia de auditoria, serviço de clientes, filtro JWT (401/403, bloqueio, revogação, isolamento, validação) |
-| Backend ponta a ponta | `cd firebase && npm run test:backend-e2e` | Cadastro → escritório → clientes → processos → isolamento entre escritórios → dashboard → auditoria → convite/bloqueio, com Auth e Firestore reais no emulador |
+| Backend unitário + segurança | `cd backend && mvn test` | CPF/CNPJ/CNJ, criptografia, RBAC, cadeia de auditoria, serviço de clientes, contagem de prazos (feriados, recesso, suspensões), política de alertas, filtro JWT (401/403, bloqueio, revogação, isolamento, validação) |
+| Backend ponta a ponta | `cd firebase && npm run test:backend-e2e` | Cadastro → escritório → clientes → processos → isolamento → dashboard → auditoria → calendário forense → prazos (validação, alertas idempotentes) → agenda (lembretes) → convite/bloqueio, com Auth e Firestore reais no emulador |
 | Security Rules | `cd firebase && npm run test:rules` | Perfis, isolamento, auditoria imutável, notificações, Storage |
-| Frontend | `cd frontend && npm test -- --watch=false --browsers=ChromeHeadless` | Validadores, pipes, guards, interceptor, formulário de cliente |
+| Frontend | `cd frontend && npm test -- --watch=false --browsers=ChromeHeadless` | Validadores, pipes, guards, interceptor, formulário de cliente, utilitários da agenda e de prazos |

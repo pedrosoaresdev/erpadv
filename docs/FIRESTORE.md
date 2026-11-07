@@ -29,9 +29,9 @@ auditoria). Campos comuns a todas as entidades:
 | `clients/{id}/interactions` | histórico de atendimentos | `channel`, `subject`, `description`, `occurredAt`, `userUid`, `userName` |
 | `cases` | processos | `cnjNumber`, `clientId`, `clientName`, `opposingParty`, `court`, `courtDivision`, `district`, `state`, `area`, `proceduralClass`, `subject`, `responsibleUid`, `responsibleName`, `claimValueCents`, `distributionDate`, `status`, `notes`, `confidential`, `searchTokens[]` |
 | `case_movements` | movimentações/decisões/despachos | `caseId`, `type`, `date`, `title`, `description`, `source` (`MANUAL`/`INTEGRACAO`) |
-| `deadlines` | prazos | `caseId`, `clientId`, `description`, `type`, `startDate`, `dueDate`, `responsibleUid`, `priority`, `status`, `alertsSent[]`, `validatedBy` |
-| `hearings` | audiências | `caseId`, `type`, `dateTime`, `location`, `responsibleUid` |
-| `appointments` | agenda | `type`, `title`, `start`, `end`, `responsibleUids[]`, `clientId`, `caseId`, `reminders[]` |
+| `deadlines` | prazos | `caseId`, `caseNumber`, `clientId`, `clientName`, `description`, `type`, `startDate`, `dueDate`, `days`, `countingMode` (`UTEIS`/`CORRIDOS`/`MANUAL`), `court`, `responsibleUid`, `priority`, `status` (`PENDENTE`/`CONCLUIDO`/`CANCELADO`; *vencido* é derivado), `validated`, `validatedBy`, `alertsSent[]`, `restricted` |
+| `court_calendar` | feriados locais e suspensões | `startDate`, `endDate`, `court` (nulo = todos), `description`, `kind` (`FERIADO`/`SUSPENSAO`) |
+| `appointments` | agenda (audiências = `type: AUDIENCIA`) | `type`, `title`, `start`, `end` (epoch ms), `allDay`, `location`, `meetingUrl`, `responsibleUids[]`, `clientId`, `caseId`, `reminders[]` (minutos), `remindersSent[]`, `restricted` |
 | `contracts` | contratos | `clientId`, `caseIds[]`, `type`, `status`, `templateId`, `signedDocumentId`, `history[]` |
 | `fees` | honorários | `contractId`, `clientId`, `kind` (`FIXO`/`PARCELADO`/`ETAPAS`/`EXITO`), `amountCents`, `installments[]` |
 | `financial_transactions` | lançamentos (receber/pagar) | `direction` (`IN`/`OUT`), `category`, `amountCents`, `dueDate`, `paidAt`, `status`, `feeId`, `receiptDocumentId`, `scope` (`ESCRITORIO`/`SOCIO`) |
@@ -46,7 +46,12 @@ auditoria). Campos comuns a todas as entidades:
 | `audit_meta/chain` | cabeça da cadeia | `lastSeq`, `lastHash` |
 | `ai_interactions` | uso da IA | `agent`, `uid`, `promptHash`, `model`, `tokens`, `reviewedBy` |
 | `system_settings` | configurações do escritório | `modules{}`, `notifications{}`, `integrations{}` |
-| `device_tokens` | tokens FCM | `uid`, `token`, `platform` |
+| `device_tokens` | tokens FCM (ID = SHA-256 do token) | `uid`, `token`, `platform` |
+
+Coleção global `system_locks/{job}`: trava distribuída dos jobs agendados (`owner`, `lockedUntil`).
+
+Os jobs de alertas usam *collection group queries* em `deadlines` (`status`, `dueDate`) e
+`appointments` (`start`), com índices de escopo `COLLECTION_GROUP` declarados em `firestore.indexes.json`.
 
 ## Índices
 

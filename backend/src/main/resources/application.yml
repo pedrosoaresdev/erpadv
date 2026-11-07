@@ -68,6 +68,11 @@ app:
     require-email-verified: ${REQUIRE_EMAIL_VERIFIED:true}
     # Recusa iniciar com as chaves de desenvolvimento publicadas no .env.example
     production: ${APP_PRODUCTION:false}
+  jobs:
+    # Alertas de prazos (10/5/3/1/0 dias) e lembretes de agenda. Desligue em réplicas sem agendamento.
+    enabled: ${JOBS_ENABLED:true}
+    deadline-alerts-cron: ${DEADLINE_ALERTS_CRON:0 5 * * * *}
+    appointment-reminders-ms: ${APPOINTMENT_REMINDERS_MS:300000}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
 

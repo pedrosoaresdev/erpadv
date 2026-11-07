@@ -30,6 +30,10 @@ export class ApiService {
     return this.http.patch<T>(this.url(path), body);
   }
 
+  delete<T>(path: string): Observable<T> {
+    return this.http.delete<T>(this.url(path));
+  }
+
   private url(path: string): string {
     return `${this.config.apiUrl}${path.startsWith('/') ? path : '/' + path}`;
   }

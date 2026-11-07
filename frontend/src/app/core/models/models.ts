@@ -259,6 +259,8 @@ export interface Dashboard {
   casesByArea: NamedCount[];
   casesByStatus: NamedCount[];
   productivity: NamedCount[];
+  deadlines: { dueToday: number; urgent: number; overdue: number; upcoming: number; completedInPeriod: number; unvalidated: number };
+  hearings: { next30Days: number; byMonth: MonthPoint[] };
   pendingModules: Record<string, string>;
 }
 
@@ -293,4 +295,150 @@ export interface AppNotification {
   link: string | null;
   read: boolean;
   createdAt: number;
+}
+
+// ------------------------------------------------------------------ prazos (Etapa 9)
+export type DeadlineType =
+  | 'CONTESTACAO' | 'REPLICA' | 'RECURSO' | 'CONTRARRAZOES' | 'EMBARGOS_DECLARACAO' | 'MANIFESTACAO'
+  | 'CUMPRIMENTO' | 'RESPOSTA_ACUSACAO' | 'ALEGACOES_FINAIS' | 'PRAZO_ADMINISTRATIVO' | 'OUTRO';
+export type CountingMode = 'UTEIS' | 'CORRIDOS' | 'MANUAL';
+export type DeadlinePriority = 'BAIXA' | 'MEDIA' | 'ALTA' | 'CRITICA';
+export type DeadlineStatus = 'PENDENTE' | 'CONCLUIDO' | 'CANCELADO';
+export type DeadlineSituation = 'FUTURO' | 'URGENTE' | 'HOJE' | 'VENCIDO' | 'CONCLUIDO' | 'CANCELADO';
+export type DeadlineView = 'PENDENTES' | 'HOJE' | 'URGENTES' | 'FUTUROS' | 'VENCIDOS' | 'CONCLUIDOS' | 'CANCELADOS' | 'TODOS';
+
+export interface Deadline {
+  id: string;
+  caseId: string | null;
+  caseNumber: string | null;
+  clientId: string | null;
+  clientName: string | null;
+  description: string;
+  type: DeadlineType;
+  typeLabel: string;
+  startDate: string;
+  dueDate: string;
+  days: number | null;
+  countingMode: CountingMode;
+  court: string | null;
+  responsibleUid: string;
+  responsibleName: string;
+  priority: DeadlinePriority;
+  status: DeadlineStatus;
+  situation: DeadlineSituation;
+  daysLeft: number;
+  notes: string | null;
+  validated: boolean;
+  validatedByName: string | null;
+  validatedAt: string | null;
+  completedAt: string | null;
+  completedByName: string | null;
+  restricted: boolean;
+  createdAt: string;
+}
+
+export interface DeadlineRequest {
+  caseId?: string | null;
+  clientId?: string | null;
+  description: string;
+  type: DeadlineType;
+  startDate: string;
+  dueDate?: string | null;
+  days?: number | null;
+  countingMode: CountingMode;
+  court?: string | null;
+  responsibleUid: string;
+  priority: DeadlinePriority;
+  notes?: string | null;
+}
+
+export interface DeadlineStats {
+  dueToday: number;
+  urgent: number;
+  upcoming: number;
+  overdue: number;
+  completed: number;
+  unvalidated: number;
+}
+
+export interface DeadlineCalculation {
+  startDate: string;
+  days: number;
+  mode: CountingMode;
+  dueDate: string;
+  skippedDays: { date: string; reason: string }[];
+  notes: string[];
+}
+
+export interface CourtCalendarEntry {
+  id: string;
+  startDate: string;
+  endDate: string;
+  court: string | null;
+  description: string;
+  kind: 'FERIADO' | 'SUSPENSAO';
+}
+
+export interface CourtCalendar {
+  national: { date: string; description: string; national: boolean }[];
+  office: CourtCalendarEntry[];
+}
+
+// ------------------------------------------------------------------ agenda (Etapa 9)
+export type AppointmentType =
+  | 'AUDIENCIA' | 'REUNIAO' | 'CONSULTA' | 'JULGAMENTO' | 'SUSTENTACAO_ORAL' | 'COMPROMISSO' | 'ATIVIDADE_INTERNA';
+
+export interface Appointment {
+  id: string;
+  type: AppointmentType;
+  typeLabel: string;
+  title: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+  location: string | null;
+  meetingUrl: string | null;
+  description: string | null;
+  responsibleUids: string[];
+  responsibleNames: string[];
+  clientId: string | null;
+  clientName: string | null;
+  caseId: string | null;
+  caseNumber: string | null;
+  reminders: number[];
+  restricted: boolean;
+}
+
+export interface AppointmentRequest {
+  type: AppointmentType;
+  title: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+  location?: string | null;
+  meetingUrl?: string | null;
+  description?: string | null;
+  responsibleUids: string[];
+  clientId?: string | null;
+  caseId?: string | null;
+  reminders: number[];
+}
+
+export interface CalendarEvent {
+  id: string;
+  kind: 'APPOINTMENT' | 'DEADLINE';
+  type: string;
+  typeLabel: string;
+  title: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+  status: string | null;
+  location: string | null;
+  caseId: string | null;
+  caseNumber: string | null;
+  clientName: string | null;
+  responsibleNames: string[];
+  priority: DeadlinePriority | null;
+  validated: boolean | null;
 }

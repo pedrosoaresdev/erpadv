@@ -1,5 +1,10 @@
 import {
+  AppointmentType,
   CaseStatus,
+  CountingMode,
+  DeadlinePriority,
+  DeadlineSituation,
+  DeadlineType,
   ClientStatus,
   InteractionChannel,
   LegalArea,
@@ -126,3 +131,80 @@ export function enumOptions<T extends string>(labels: Record<T, string>, exclude
 }
 
 export type { Permission };
+
+// ------------------------------------------------------------------ Etapa 9
+
+export const DEADLINE_TYPE_LABELS: Record<DeadlineType, string> = {
+  CONTESTACAO: 'Contestação',
+  REPLICA: 'Réplica',
+  RECURSO: 'Recurso',
+  CONTRARRAZOES: 'Contrarrazões',
+  EMBARGOS_DECLARACAO: 'Embargos de declaração',
+  MANIFESTACAO: 'Manifestação',
+  CUMPRIMENTO: 'Cumprimento de decisão',
+  RESPOSTA_ACUSACAO: 'Resposta à acusação',
+  ALEGACOES_FINAIS: 'Alegações finais',
+  PRAZO_ADMINISTRATIVO: 'Prazo administrativo',
+  OUTRO: 'Outro',
+};
+
+export const COUNTING_LABELS: Record<CountingMode, string> = {
+  UTEIS: 'Dias úteis (CPC)',
+  CORRIDOS: 'Dias corridos',
+  MANUAL: 'Data informada manualmente',
+};
+
+export const PRIORITY_LABELS: Record<DeadlinePriority, string> = {
+  BAIXA: 'Baixa',
+  MEDIA: 'Média',
+  ALTA: 'Alta',
+  CRITICA: 'Crítica',
+};
+
+export const SITUATION_LABELS: Record<DeadlineSituation, string> = {
+  FUTURO: 'No prazo',
+  URGENTE: 'Urgente',
+  HOJE: 'Vence hoje',
+  VENCIDO: 'Vencido',
+  CONCLUIDO: 'Concluído',
+  CANCELADO: 'Cancelado',
+};
+
+export const SITUATION_TONE: Record<DeadlineSituation, string> = {
+  FUTURO: 'info',
+  URGENTE: 'warning',
+  HOJE: 'danger',
+  VENCIDO: 'danger',
+  CONCLUIDO: 'success',
+  CANCELADO: '',
+};
+
+export const APPOINTMENT_LABELS: Record<AppointmentType, string> = {
+  AUDIENCIA: 'Audiência',
+  REUNIAO: 'Reunião',
+  CONSULTA: 'Consulta',
+  JULGAMENTO: 'Julgamento',
+  SUSTENTACAO_ORAL: 'Sustentação oral',
+  COMPROMISSO: 'Compromisso',
+  ATIVIDADE_INTERNA: 'Atividade interna',
+};
+
+/** Cor por tipo de evento (agenda) — paleta discreta sobre o tema. */
+export const EVENT_COLORS: Record<string, string> = {
+  AUDIENCIA: '#b42318',
+  JULGAMENTO: '#7a3eb1',
+  SUSTENTACAO_ORAL: '#9b6a12',
+  REUNIAO: '#1d4ed8',
+  CONSULTA: '#0f766e',
+  COMPROMISSO: '#4b5563',
+  ATIVIDADE_INTERNA: '#64748b',
+  DEADLINE: '#c5a46d',
+};
+
+export const REMINDER_OPTIONS = [
+  { value: 15, label: '15 minutos antes' },
+  { value: 60, label: '1 hora antes' },
+  { value: 180, label: '3 horas antes' },
+  { value: 1440, label: '1 dia antes' },
+  { value: 2880, label: '2 dias antes' },
+];

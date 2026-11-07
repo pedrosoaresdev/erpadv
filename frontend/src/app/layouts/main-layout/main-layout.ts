@@ -12,6 +12,7 @@ import { filter, map } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
 import { AppNotification } from '../../core/models/models';
 import { NotificationService } from '../../core/services/notification.service';
+import { PushService } from '../../core/services/push.service';
 import { ThemeService } from '../../core/services/theme.service';
 import { RelativeTimePipe } from '../../shared/pipes/format.pipes';
 import { GlobalSearchComponent } from './global-search';
@@ -32,6 +33,7 @@ export class MainLayoutComponent {
   readonly auth = inject(AuthService);
   readonly theme = inject(ThemeService);
   readonly notifications = inject(NotificationService);
+  readonly push = inject(PushService);
   private readonly router = inject(Router);
 
   readonly isMobile = toSignal(
@@ -53,6 +55,7 @@ export class MainLayoutComponent {
       const me = this.auth.me();
       if (me?.officeId) {
         this.notifications.start(me.officeId, me.uid);
+        void this.push.init();
       } else {
         this.notifications.stop();
       }
@@ -84,9 +87,10 @@ export class MainLayoutComponent {
     }
   }
 
-  logout(): void {
+  async logout(): Promise<void> {
     this.notifications.stop();
-    void this.auth.logout();
+    await this.push.disable();
+    await this.auth.logout();
   }
 
   private readCollapsed(): boolean {

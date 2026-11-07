@@ -2,6 +2,13 @@ package br.com.erpadv.services;
 
 import br.com.erpadv.dto.DashboardDtos.CaseStats;
 import br.com.erpadv.dto.DashboardDtos.ClientStats;
+import br.com.erpadv.dto.DashboardDtos.DeadlineStats;
+import br.com.erpadv.dto.DashboardDtos.HearingStats;
+import br.com.erpadv.dto.DeadlineDtos;
+import br.com.erpadv.models.AppointmentType;
+import br.com.erpadv.models.DeadlineStatus;
+import br.com.erpadv.repositories.AppointmentRepository;
+import br.com.erpadv.repositories.DeadlineRepository;
 import br.com.erpadv.dto.DashboardDtos.DashboardResponse;
 import br.com.erpadv.dto.DashboardDtos.MonthPoint;
 import br.com.erpadv.dto.DashboardDtos.NamedCount;
@@ -51,12 +58,17 @@ public class DashboardService {
     private final ClientRepository clients;
     private final CaseRepository cases;
     private final UserRepository users;
+    private final DeadlineRepository deadlines;
+    private final AppointmentRepository appointments;
     private final Map<String, CacheEntry> cache = new ConcurrentHashMap<>();
 
-    public DashboardService(ClientRepository clients, CaseRepository cases, UserRepository users) {
+    public DashboardService(ClientRepository clients, CaseRepository cases, UserRepository users,
+                            DeadlineRepository deadlines, AppointmentRepository appointments) {
         this.clients = clients;
         this.cases = cases;
         this.users = users;
+        this.deadlines = deadlines;
+        this.appointments = appointments;
     }
 
     public DashboardResponse get(AuthenticatedUser user, LocalDate from, LocalDate to) {
@@ -112,6 +124,30 @@ public class DashboardService {
             f.put("clients.m." + m, range(cl, a, b).count().get());
             f.put("cases.m." + m, range(cs, a, b).count().get());
         }
+        // Prazos e audiências (Etapa 9)
+        CollectionReference dl = deadlines.collection(officeId);
+        CollectionReference ap = appointments.collection(officeId);
+        LocalDate today = LocalDate.now(ZONE);
+        String t = today.toString();
+        String urgentLimit = today.plusDays(DeadlineDtos.URGENT_DAYS).toString();
+        Query pending = dl.whereEqualTo("status", DeadlineStatus.PENDENTE.name());
+        f.put("dl.today", pending.whereEqualTo("dueDate", t).count().get());
+        f.put("dl.urgent", pending.whereGreaterThan("dueDate", t).whereLessThanOrEqualTo("dueDate", urgentLimit).count().get());
+        f.put("dl.upcoming", pending.whereGreaterThan("dueDate", urgentLimit).count().get());
+        f.put("dl.overdue", pending.whereLessThan("dueDate", t).count().get());
+        f.put("dl.unvalidated", pending.whereEqualTo("validated", false).count().get());
+        f.put("dl.completed", dl.whereEqualTo("status", DeadlineStatus.CONCLUIDO.name())
+                .whereGreaterThanOrEqualTo("dueDate", start.toString())
+                .whereLessThanOrEqualTo("dueDate", end.toString()).count().get());
+        Query hearings = ap.whereEqualTo("type", AppointmentType.AUDIENCIA.name());
+        long nowMs = System.currentTimeMillis();
+        f.put("hr.next30", hearings.whereGreaterThanOrEqualTo("start", nowMs)
+                .whereLessThan("start", nowMs + 30L * 24 * 3600 * 1000).count().get());
+        for (YearMonth m : months) {
+            f.put("hr.m." + m, hearings.whereGreaterThanOrEqualTo("start", startOfDay(m.atDay(1)))
+                    .whereLessThan("start", startOfDay(m.plusMonths(1).atDay(1))).count().get());
+        }
+
         List<UserProfile> lawyers = users.activeStaff(officeId).stream().filter(u -> u.getRole().isLawyer()).toList();
         for (UserProfile lawyer : lawyers) {
             f.put("lawyer." + lawyer.getId(), cs.whereEqualTo("responsibleUid", lawyer.getId())
@@ -154,13 +190,17 @@ public class DashboardService {
                 .sorted(Comparator.comparingLong(NamedCount::value).reversed())
                 .toList();
 
-        Map<String, String> pending = new LinkedHashMap<>();
-        pending.put("deadlines", "Prazos e audiências — Etapa 9");
-        pending.put("finance", "Financeiro e honorários — Etapa 10");
-        pending.put("contracts", "Contratos — Etapa 11");
+        DeadlineStats deadlineStats = new DeadlineStats(v.get("dl.today"), v.get("dl.urgent"), v.get("dl.overdue"),
+                v.get("dl.upcoming"), v.get("dl.completed"), v.get("dl.unvalidated"));
+        HearingStats hearingStats = new HearingStats(v.get("hr.next30"),
+                months.stream().map(m -> new MonthPoint(m.toString(), v.get("hr.m." + m), null)).toList());
+
+        Map<String, String> pendingModules = new LinkedHashMap<>();
+        pendingModules.put("finance", "Financeiro e honorários — Etapa 10");
+        pendingModules.put("contracts", "Contratos — Etapa 11");
 
         return new DashboardResponse(start, end, clientStats, caseStats, clientGrowth, newCases, byArea, byStatus,
-                productivity, pending);
+                productivity, deadlineStats, hearingStats, pendingModules);
     }
 
     private static Query range(CollectionReference col, long fromInclusive, long toExclusive) {

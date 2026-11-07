@@ -60,6 +60,9 @@
             <button mat-button (click)="notifications.markAllRead()">Marcar todas como lidas</button>
           }
         </div>
+        @if (push.available() && !push.enabled()) {
+          <button mat-menu-item (click)="push.enable()"><mat-icon>notifications_active</mat-icon>Ativar notificações push neste navegador</button>
+        }
         @for (n of notifications.items(); track n.id) {
           <button mat-menu-item class="notif" [class.unread]="!n.read" (click)="openNotification(n)">
             <div class="notif-title">{{ n.title }}</div>

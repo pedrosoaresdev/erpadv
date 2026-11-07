@@ -14,6 +14,10 @@ import { BrDatePipe, CentsPipe } from '../../shared/pipes/format.pipes';
 import { CaseFormDialogComponent } from './case-form-dialog';
 import { CasesService } from './cases.service';
 import { MovementDialogComponent } from './movement-dialog';
+import { Deadline } from '../../core/models/models';
+import { DeadlinesService } from '../deadlines/deadlines.service';
+import { DeadlineFormDialogComponent } from '../deadlines/deadline-form-dialog';
+import { AppointmentDialogComponent } from '../calendar/appointment-dialog';
 
 /** Página do processo: dados, linha do tempo de movimentações e ações. */
 @Component({
@@ -56,6 +60,7 @@ import { MovementDialogComponent } from './movement-dialog';
         </section>
 
         <div class="layout">
+          <div class="side">
           <section class="card card-pad info">
             <div class="card-title"><mat-icon>info</mat-icon>Dados do processo</div>
             <dl>
@@ -73,6 +78,33 @@ import { MovementDialogComponent } from './movement-dialog';
               <div class="notes"><div class="card-title small-title">Observações</div><p>{{ p.notes }}</p></div>
             }
           </section>
+          <section class="card card-pad">
+            <div class="card-title"><mat-icon>alarm</mat-icon>Prazos pendentes
+              <span class="spacer"></span>
+              @if (auth.has('DEADLINES_WRITE') && !p.archived) {
+                <button mat-icon-button (click)="newDeadline()" matTooltip="Novo prazo" aria-label="Novo prazo"><mat-icon>add_alarm</mat-icon></button>
+              }
+              @if (auth.has('CALENDAR_WRITE') && !p.archived) {
+                <button mat-icon-button (click)="newHearing()" matTooltip="Agendar audiência" aria-label="Agendar audiência"><mat-icon>event</mat-icon></button>
+              }
+            </div>
+            @if (!auth.has('DEADLINES_READ')) {
+              <p class="muted small-p">Seu perfil não acessa o controle de prazos.</p>
+            } @else if (deadlines().length === 0) {
+              <p class="muted small-p">Nenhum prazo pendente.</p>
+            } @else {
+              <ul class="dl">
+                @for (d of deadlines(); track d.id) {
+                  <li>
+                    <a [routerLink]="['/prazos']" [queryParams]="{ id: d.id }">{{ d.description }}</a>
+                    <span class="mono" [class.late]="d.daysLeft <= 0">{{ d.dueDate | brDate }}</span>
+                    @if (!d.validated) { <mat-icon class="pend" matTooltip="Contagem não validada">pending</mat-icon> }
+                  </li>
+                }
+              </ul>
+            }
+          </section>
+          </div>
 
           <section class="card card-pad">
             <div class="card-title"><mat-icon>timeline</mat-icon>Linha do tempo</div>
@@ -114,6 +146,14 @@ import { MovementDialogComponent } from './movement-dialog';
     .meta { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
     .hero-actions { display: flex; gap: 8px; align-items: center; }
     .layout { display: grid; grid-template-columns: 360px 1fr; gap: 16px; align-items: start; }
+    .side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+    .card-title .spacer { flex: 1; }
+    .small-p { margin: 0; font-size: 13px; }
+    .dl { list-style: none; margin: 0; padding: 0; }
+    .dl li { display: flex; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--app-border); font-size: 13px; }
+    .dl li a { flex: 1; text-decoration: none; font-weight: 500; }
+    .dl .late { color: var(--app-danger); font-weight: 600; }
+    .dl .pend { font-size: 16px; width: 16px; height: 16px; color: var(--app-warning); }
     @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
     dl { display: grid; grid-template-columns: 120px 1fr; gap: 10px; margin: 0; }
     dt { color: var(--app-text-muted); font-size: 13px; }
@@ -150,6 +190,8 @@ export class CaseDetailComponent {
   readonly legalCase = signal<LegalCase | null>(null);
   readonly movements = signal<CaseMovement[]>([]);
   readonly cursor = signal<string | null>(null);
+  readonly deadlines = signal<Deadline[]>([]);
+  private readonly deadlinesService = inject(DeadlinesService);
 
   constructor() {
     effect(() => {
@@ -159,10 +201,47 @@ export class CaseDetailComponent {
         next: (c) => {
           this.legalCase.set(c);
           this.loadMovements(false);
+          this.loadDeadlines();
         },
         error: () => void this.router.navigate(['/processos']),
       });
     });
+  }
+
+  loadDeadlines(): void {
+    if (!this.auth.has('DEADLINES_READ')) return;
+    this.deadlinesService.list('PENDENTES', { caseId: this.id() }, null, 10).subscribe((page) => this.deadlines.set(page.items));
+  }
+
+  newDeadline(): void {
+    const c = this.legalCase();
+    if (!c) return;
+    this.dialog
+      .open(DeadlineFormDialogComponent, {
+        data: { legalCase: { id: c.id, cnjNumber: c.cnjNumber, clientName: c.clientName, court: c.court } },
+        width: '880px', maxWidth: '96vw',
+      })
+      .afterClosed()
+      .subscribe((d?: Deadline) => {
+        if (d) {
+          this.toast.success('Prazo cadastrado.');
+          this.loadDeadlines();
+        }
+      });
+  }
+
+  newHearing(): void {
+    const c = this.legalCase();
+    if (!c) return;
+    this.dialog
+      .open(AppointmentDialogComponent, {
+        data: { legalCase: { id: c.id, cnjNumber: c.cnjNumber, clientName: c.clientName } },
+        width: '820px', maxWidth: '96vw',
+      })
+      .afterClosed()
+      .subscribe((a) => {
+        if (a && a !== 'deleted') this.toast.success('Compromisso agendado.');
+      });
   }
 
   loadMovements(more: boolean): void {

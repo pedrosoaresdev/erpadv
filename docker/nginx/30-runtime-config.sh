@@ -27,6 +27,7 @@ cat > "$OUT" <<EOF
     "messagingSenderId": "$(json_escape "${FIREBASE_MESSAGING_SENDER_ID:-000000000000}")",
     "appId": "$(json_escape "${FIREBASE_APP_ID:-1:000000000000:web:0000000000000000}")"
   },
+  "messaging": { "vapidKey": "$(json_escape "${FIREBASE_VAPID_KEY:-}")" },
   "emulators": $EMULATORS
 }
 EOF

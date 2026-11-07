@@ -44,6 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = {
         "app.security.data-encryption-key=ZGV2LW9ubHkta2V5LWNoYW5nZS1tZS0zMi1ieXRlcyE=",
         "app.security.search-hmac-key=ZGV2LW9ubHktaG1hYy1rZXktY2hhbmdlLW1lLTMyYnl0ZXM=",
+        "app.jobs.enabled=false",
         "app.security.rate-limit-per-minute=1000"
 })
 @AutoConfigureMockMvc
@@ -66,6 +67,10 @@ class SecurityIntegrationTest {
     ClientService clientService;
     @MockitoBean
     AuthService authService;
+    @MockitoBean
+    br.com.erpadv.services.DeadlineService deadlineService;
+    @MockitoBean
+    br.com.erpadv.services.CalendarService calendarService;
 
     private void token(String token, String uid, String officeId, Role role, long iatSeconds) throws Exception {
         FirebaseToken decoded = mock(FirebaseToken.class);
@@ -220,5 +225,61 @@ class SecurityIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"\"}"))
                 .andExpect(status().isBadRequest());
         verify(authService, never()).createOffice(any(), any());
+    }
+
+    // ------------------------------------------------------------------ Etapa 9: prazos e agenda
+
+    @Test
+    void estagiarioConsultaMasNaoCadastraPrazo() throws Exception {
+        token("t-est9", "est9", "office1", Role.ESTAGIARIO, now());
+        profile("est9", "office1", Role.ESTAGIARIO, UserStatus.ACTIVE, null);
+        when(deadlineService.list(any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(new CursorPage<>(List.of(), null));
+        mvc.perform(get("/api/deadlines").header("Authorization", "Bearer t-est9"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/deadlines").header("Authorization", "Bearer t-est9")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"Contestação\",\"type\":\"CONTESTACAO\",\"startDate\":\"2026-11-02\","
+                                + "\"days\":15,\"countingMode\":\"UTEIS\",\"responsibleUid\":\"est9\",\"priority\":\"ALTA\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/calendar/appointments").header("Authorization", "Bearer t-est9")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"REUNIAO\",\"title\":\"Reunião\",\"start\":\"2026-11-10T13:00:00Z\","
+                                + "\"end\":\"2026-11-10T14:00:00Z\",\"responsibleUids\":[\"est9\"]}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void financeiroNaoAcessaPrazos() throws Exception {
+        token("t-fin9", "fin9", "office1", Role.FINANCEIRO, now());
+        profile("fin9", "office1", Role.FINANCEIRO, UserStatus.ACTIVE, null);
+        mvc.perform(get("/api/deadlines").header("Authorization", "Bearer t-fin9"))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/calendar/events").param("from", "2026-11-01T00:00:00Z").param("to", "2026-12-01T00:00:00Z")
+                        .header("Authorization", "Bearer t-fin9"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void secretariaConsultaAgenda() throws Exception {
+        token("t-sec9", "sec9", "office1", Role.SECRETARIA, now());
+        profile("sec9", "office1", Role.SECRETARIA, UserStatus.ACTIVE, null);
+        when(calendarService.events(any(), any(), any(), org.mockito.ArgumentMatchers.anyBoolean(),
+                org.mockito.ArgumentMatchers.anyBoolean())).thenReturn(List.of());
+        mvc.perform(get("/api/calendar/events").param("from", "2026-11-01T00:00:00Z").param("to", "2026-12-01T00:00:00Z")
+                        .header("Authorization", "Bearer t-sec9"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void prazoExigeCamposObrigatorios() throws Exception {
+        token("t-adv9", "adv9", "office1", Role.ADVOGADO, now());
+        profile("adv9", "office1", Role.ADVOGADO, UserStatus.ACTIVE, null);
+        mvc.perform(post("/api/deadlines").header("Authorization", "Bearer t-adv9")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"days\":0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fields.description").exists())
+                .andExpect(jsonPath("$.fields.days").exists())
+                .andExpect(jsonPath("$.fields.responsibleUid").exists());
     }
 }
