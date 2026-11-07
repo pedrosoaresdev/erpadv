@@ -20,7 +20,7 @@ export type Permission =
   | 'DEADLINES_READ' | 'DEADLINES_WRITE' | 'CALENDAR_READ' | 'CALENDAR_WRITE'
   | 'FINANCE_READ' | 'FINANCE_WRITE' | 'CONTRACTS_READ' | 'CONTRACTS_WRITE'
   | 'DOCUMENTS_READ' | 'DOCUMENTS_WRITE' | 'DOCUMENTS_CONFIDENTIAL'
-  | 'CRIMINAL_READ' | 'CRIMINAL_WRITE' | 'AI_USE' | 'MESSAGES_USE' | 'REPORTS_VIEW'
+  | 'CRIMINAL_READ' | 'CRIMINAL_WRITE' | 'AI_USE' | 'MESSAGES_USE' | 'BOARDS_USE' | 'CRM_USE' | 'REPORTS_VIEW'
   | 'EMPLOYEES_READ' | 'EMPLOYEES_MANAGE' | 'AUDIT_READ' | 'ADMIN_PANEL' | 'SETTINGS_MANAGE'
   | 'PLATFORM_ADMIN' | 'PORTAL_ACCESS';
 
@@ -41,6 +41,8 @@ export interface Me {
   roleLabel: string | null;
   clientId: string | null;
   permissions: Permission[];
+  platformAdmin: boolean;
+  customRoleName: string | null;
 }
 
 // ------------------------------------------------------------------ clientes
@@ -206,6 +208,9 @@ export interface Employee {
   oabNumber: string | null;
   phone: string | null;
   position: string | null;
+  customRoleId: string | null;
+  customRoleName: string | null;
+  cpfMasked: string | null;
   permissionsGranted: Permission[];
   permissionsRevoked: Permission[];
   effectivePermissions: Permission[];

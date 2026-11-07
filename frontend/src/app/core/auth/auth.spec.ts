@@ -12,11 +12,18 @@ function me(partial: Partial<Me>): Me {
   return {
     uid: 'u1', email: 'a@b.test', name: 'Ana', emailVerified: true, onboardingRequired: false,
     emailVerificationRequired: false, officeId: 'o1', officeName: 'Escritório', role: 'ADVOGADO',
-    roleLabel: 'Advogado', clientId: null, permissions: [], ...partial,
+    roleLabel: 'Advogado', clientId: null, permissions: [], platformAdmin: false, customRoleName: null, ...partial,
   };
 }
 
 describe('guards e interceptors de autenticação', () => {
+  it('master da plataforma sem escritório vai para o painel /plataforma', () => {
+    const home = (AuthService.prototype.homePath as (m: Me | null) => string).call({}, me({
+      role: 'MASTER', officeId: null, officeName: 'Plataforma ERPAdv', platformAdmin: true, permissions: ['PLATFORM_ADMIN'],
+    }));
+    expect(home).toBe('/plataforma');
+  });
+
   const current = signal<Me | null>(null);
   const fakeAuth = {
     me: current,

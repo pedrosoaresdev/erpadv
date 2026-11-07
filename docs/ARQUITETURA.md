@@ -141,7 +141,15 @@ Papéis: `MASTER` (plataforma), `SOCIO_ADMIN`, `ADVOGADO`, `ADVOGADO_ASSOCIADO`,
 Permissões granulares (módulo + operação + tipo de informação), por exemplo:
 `CLIENTS_READ`, `CLIENTS_WRITE`, `CLIENTS_SENSITIVE_READ`, `CLIENTS_INACTIVATE`,
 `CASES_READ`, `CASES_WRITE`, `CASES_ARCHIVE`, `CRIMINAL_READ`, `DOCUMENTS_CONFIDENTIAL`,
-`FINANCE_READ`, `EMPLOYEES_MANAGE`, `AUDIT_READ`, `ADMIN_PANEL` …
+`FINANCE_READ`, `BOARDS_USE`, `CRM_USE`, `EMPLOYEES_MANAGE`, `AUDIT_READ`, `ADMIN_PANEL`, `PLATFORM_ADMIN` …
+
+**Cargos personalizados** (`offices/{id}/roles`): o sócio administrador cria cargos como
+"Advogado júnior" ou "Estagiário" escolhendo as permissões; o cargo tem um *papel-base* que define
+o comportamento (ex.: aparecer como advogado responsável). As permissões efetivas são resolvidas por
+`PermissionResolver` (cargo → concessões → revogações) a cada requisição, com cache curto.
+
+**Master da plataforma**: e-mails em `PLATFORM_MASTER_EMAILS` recebem `MASTER` + `PLATFORM_ADMIN`
+(painel `/plataforma`: escritórios, administradores, planos/limite de usuários, suspensão).
 A matriz completa está em `backend/.../security/RolePermissions.java` e é exposta em
 `GET /api/auth/me` para o front esconder o que o usuário não pode usar (o backend continua
 sendo a autoridade).

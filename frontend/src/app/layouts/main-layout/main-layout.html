@@ -43,7 +43,9 @@
       <button mat-icon-button (click)="toggleSidebar()" aria-label="Recolher menu" matTooltip="Recolher/expandir menu">
         <mat-icon>{{ isMobile() ? 'menu' : (collapsed() ? 'menu_open' : 'menu') }}</mat-icon>
       </button>
-      <app-global-search class="search-slot" />
+      @if (auth.me()?.officeId) {
+        <app-global-search class="search-slot" />
+      }
       <span class="spacer"></span>
 
       <button mat-icon-button (click)="theme.toggle()" [matTooltip]="theme.mode() === 'dark' ? 'Tema claro' : 'Tema escuro'" aria-label="Alternar tema">

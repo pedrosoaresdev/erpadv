@@ -69,12 +69,30 @@ Documentação: [arquitetura e fluxo de autenticação](docs/ARQUITETURA.md) ·
   histórico de alterações; alertas de término (30/7/1/0 dias).
 * **Documentos**: repositório no Firebase Storage com categorias, organização por cliente/processo,
   versionamento, pré-visualização, histórico de acesso, sigilo e arquivamento.
-* **Equipe**: papéis e permissões granulares por usuário.
+* **Equipe e cargos**: cargos personalizados do escritório (Advogado júnior, Estagiário, Secretário(a),
+  Financeiro… com modelos prontos) e permissões granulares; cadastro com senha inicial ou link, CPF
+  cifrado, limite de usuários do plano.
+* **Quadros (Kanban jurídico)**: modelos (contencioso, entrada de cliente, consultivo, audiências),
+  arrastar e soltar, limite WIP por coluna, automações ao entrar na coluna (concluir, notificar,
+  etiquetar, atribuir, definir vencimento), checklist, vínculo com cliente/processo, comentários com
+  @menções, tempo parado na coluna, filtros, visão em lista, "Meus cartões", conversão do cartão em
+  prazo processual e indicadores (vazão semanal, ciclo médio, gargalos, carga por pessoa).
+* **CRM comercial**: funil de captação (novo → negociação → ganho/perdido) com arrastar e soltar,
+  pontuação automática (quente/morno/frio), próxima ação com alerta de atraso, histórico de interações,
+  motivo de perda obrigatório, conversão em cliente e métricas (pipeline ponderado, conversão por
+  origem e por responsável, entradas × ganhos por mês).
+* **Painel da plataforma (master)**: o desenvolvedor cria escritórios já com o advogado administrador
+  (nome, CPF, Nº OAB, e-mail e senha), define plano e limite de usuários, suspende/reativa e redefine
+  senhas. Acesso pelos e-mails em `PLATFORM_MASTER_EMAILS`.
 * **Auditoria**: trilha imutável encadeada por hash, com verificação de integridade.
 * **Busca global**, **notificações em tempo real**, **tema claro/escuro**, **sidebar recolhível**.
 
-Criminal, IA, portal do cliente, relatórios e
-painel master aparecem na sidebar com a etapa prevista.
+Criminal, IA, comunicação e relatórios aparecem na sidebar com a etapa prevista.
+
+### Acesso master (desenvolvedor)
+
+Defina `PLATFORM_MASTER_EMAILS=seu@email` no `.env`, recrie o backend (`docker compose up -d backend`)
+e crie a conta em **Criar conta** com esse e-mail: ao entrar, você cai no painel **Plataforma → Escritórios**.
 
 ## Produção com Firebase real
 
@@ -105,6 +123,6 @@ cd frontend && npm install && npm start                  # http://localhost:4200
 | Suíte | Comando | O que cobre |
 |---|---|---|
 | Backend unitário + segurança | `cd backend && mvn test` | CPF/CNPJ/CNJ, criptografia, RBAC, cadeia de auditoria, serviço de clientes, contagem de prazos (feriados, recesso, suspensões), política de alertas, DRE, validação de arquivos, CSV, valor por extenso, minuta, exportação PDF/DOCX, filtro JWT (401/403, bloqueio, revogação, isolamento, validação) |
-| Backend ponta a ponta | `cd firebase && npm run test:backend-e2e` | Cadastro → escritório → clientes → processos → isolamento → dashboard → auditoria → calendário forense → prazos (validação, alertas idempotentes) → agenda (lembretes) → financeiro (parcelas, inadimplência no CRM, baixa, comprovante no Storage, DRE, CSV, escopo pessoal) → documentos (versões, acessos, arquivamento) → contratos (minuta, PDF/DOCX, ativação, êxito, etapas, assinado, cancelamento) → convite/bloqueio, com Auth e Firestore reais no emulador |
+| Backend ponta a ponta | `cd firebase && npm run test:backend-e2e` | Painel master → escritório com administrador → cargo personalizado → integrante com senha → quadros (WIP, automação, menções, indicadores) → CRM (funil, conversão) → limite de usuários → suspensão; e o fluxo: cadastro → escritório → clientes → processos → isolamento → dashboard → auditoria → calendário forense → prazos (validação, alertas idempotentes) → agenda (lembretes) → financeiro (parcelas, inadimplência no CRM, baixa, comprovante no Storage, DRE, CSV, escopo pessoal) → documentos (versões, acessos, arquivamento) → contratos (minuta, PDF/DOCX, ativação, êxito, etapas, assinado, cancelamento) → convite/bloqueio, com Auth e Firestore reais no emulador |
 | Security Rules | `cd firebase && npm run test:rules` | Perfis, isolamento, auditoria imutável, notificações, Storage |
 | Frontend | `cd frontend && npm test -- --watch=false --browsers=ChromeHeadless` | Validadores, pipes, guards, interceptor, formulário de cliente, utilitários da agenda, de prazos e do financeiro |

@@ -45,7 +45,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.security.data-encryption-key=ZGV2LW9ubHkta2V5LWNoYW5nZS1tZS0zMi1ieXRlcyE=",
         "app.security.search-hmac-key=ZGV2LW9ubHktaG1hYy1rZXktY2hhbmdlLW1lLTMyYnl0ZXM=",
         "app.jobs.enabled=false",
-        "app.security.rate-limit-per-minute=1000"
+        "app.security.rate-limit-per-minute=1000",
+        "app.platform.master-emails=master@teste.com"
 })
 @AutoConfigureMockMvc
 class SecurityIntegrationTest {
@@ -63,6 +64,16 @@ class SecurityIntegrationTest {
     FirebaseMessaging firebaseMessaging;
     @MockitoBean
     UserProfileCache profileCache;
+    @MockitoBean
+    OfficeStatusCache officeStatusCache;
+    @MockitoBean
+    br.com.erpadv.services.PlatformService platformService;
+    @MockitoBean
+    br.com.erpadv.services.BoardService boardService;
+    @MockitoBean
+    br.com.erpadv.services.CrmService crmService;
+    @MockitoBean
+    br.com.erpadv.services.RoleService roleService;
     @MockitoBean
     ClientService clientService;
     @MockitoBean
@@ -371,5 +382,77 @@ class SecurityIntegrationTest {
         token("t-sec12", "sec12", "office1", Role.SECRETARIA, now());
         profile("sec12", "office1", Role.SECRETARIA, UserStatus.ACTIVE, null);
         mvc.perform(get("/api/contracts").header("Authorization", "Bearer t-sec12")).andExpect(status().isForbidden());
+    }
+
+    // ------------------------------------------------------------------ painel master, cargos, quadros e CRM
+
+    @Test
+    void masterDaPlataformaAcessaPainelSemEscritorio() throws Exception {
+        token("t-master", "master", null, null, now());
+        when(platformService.overview()).thenReturn(new br.com.erpadv.dto.PlatformDtos.PlatformOverview(
+                new br.com.erpadv.dto.PlatformDtos.PlatformStats(0, 0, 0, 0, 0), List.of()));
+        mvc.perform(get("/api/platform/offices").header("Authorization", "Bearer t-master"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stats.offices").value(0));
+        // Sem escritório, o master não usa os módulos internos.
+        mvc.perform(get("/api/clients").header("Authorization", "Bearer t-master"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void socioAdministradorNaoAcessaPainelDaPlataforma() throws Exception {
+        token("t-socio", "socio", "office1", Role.SOCIO_ADMIN, now());
+        profile("socio", "office1", Role.SOCIO_ADMIN, UserStatus.ACTIVE, null);
+        mvc.perform(get("/api/platform/offices").header("Authorization", "Bearer t-socio"))
+                .andExpect(status().isForbidden());
+        verify(platformService, never()).overview();
+    }
+
+    @Test
+    void criacaoDeEscritorioValidaDadosDoAdministrador() throws Exception {
+        token("t-master2", "master", null, null, now());
+        mvc.perform(post("/api/platform/offices").header("Authorization", "Bearer t-master2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Escritório\",\"plan\":\"PROFISSIONAL\",\"admin\":{\"fullName\":\"\","
+                                + "\"cpf\":\"\",\"oabNumber\":\"#\",\"email\":\"x\",\"password\":\"123\"}}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fields['admin.fullName']").exists())
+                .andExpect(jsonPath("$.fields['admin.password']").exists());
+    }
+
+    @Test
+    void escritorioSuspensoBloqueiaEquipe() throws Exception {
+        token("t-susp", "susp", "officeS", Role.ADVOGADO, now());
+        profile("susp", "officeS", Role.ADVOGADO, UserStatus.ACTIVE, null);
+        when(officeStatusCache.isSuspended("officeS")).thenReturn(true);
+        mvc.perform(get("/api/clients").header("Authorization", "Bearer t-susp"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("OFFICE_SUSPENDED"));
+    }
+
+    @Test
+    void estagiarioUsaQuadrosMasNaoOCrmNemCargos() throws Exception {
+        token("t-est9", "est9", "office1", Role.ESTAGIARIO, now());
+        profile("est9", "office1", Role.ESTAGIARIO, UserStatus.ACTIVE, null);
+        when(boardService.list(any(), org.mockito.ArgumentMatchers.anyBoolean())).thenReturn(List.of());
+        mvc.perform(get("/api/boards").header("Authorization", "Bearer t-est9")).andExpect(status().isOk());
+        mvc.perform(get("/api/crm/leads").header("Authorization", "Bearer t-est9")).andExpect(status().isForbidden());
+        mvc.perform(post("/api/roles").header("Authorization", "Bearer t-est9")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"X\",\"baseRole\":\"ESTAGIARIO\",\"permissions\":[\"CLIENTS_READ\"]}"))
+                .andExpect(status().isForbidden());
+        verify(crmService, never()).list(any(), any(), any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
+    }
+
+    @Test
+    void financeiroNaoConverteOportunidadeEmPrazoNemCliente() throws Exception {
+        token("t-fin9", "fin9", "office1", Role.FINANCEIRO, now());
+        profile("fin9", "office1", Role.FINANCEIRO, UserStatus.ACTIVE, null);
+        mvc.perform(get("/api/crm/metrics").header("Authorization", "Bearer t-fin9")).andExpect(status().isForbidden());
+        mvc.perform(post("/api/boards/cards/c1/deadline").header("Authorization", "Bearer t-fin9")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"Contestação\",\"type\":\"CONTESTACAO\",\"startDate\":\"2026-11-09\","
+                                + "\"days\":15,\"countingMode\":\"UTEIS\",\"responsibleUid\":\"u1\",\"priority\":\"ALTA\"}"))
+                .andExpect(status().isForbidden());
     }
 }

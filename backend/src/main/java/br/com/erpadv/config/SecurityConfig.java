@@ -2,6 +2,8 @@ package br.com.erpadv.config;
 
 import br.com.erpadv.exceptions.ProblemFactory;
 import br.com.erpadv.security.FirebaseAuthenticationFilter;
+import br.com.erpadv.security.OfficeStatusCache;
+import br.com.erpadv.security.PermissionResolver;
 import br.com.erpadv.security.Permission;
 import br.com.erpadv.security.RateLimitFilter;
 import br.com.erpadv.security.UserProfileCache;
@@ -37,8 +39,10 @@ public class SecurityConfig {
 
     @Bean
     public FirebaseAuthenticationFilter firebaseAuthenticationFilter(FirebaseAuth auth, UserProfileCache cache,
-                                                                     ProblemFactory problems) {
-        return new FirebaseAuthenticationFilter(auth, cache, problems);
+                                                                     PermissionResolver resolver,
+                                                                     OfficeStatusCache officeStatus,
+                                                                     ProblemFactory problems, AppProperties properties) {
+        return new FirebaseAuthenticationFilter(auth, cache, resolver, officeStatus, problems, properties);
     }
 
     @Bean
@@ -87,6 +91,7 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**", "/api/onboarding/**").authenticated()
+                        .requestMatchers("/api/platform/**").hasAuthority(Permission.PLATFORM_ADMIN.authority())
                         .requestMatchers("/api/portal/**").hasAuthority(Permission.PORTAL_ACCESS.authority())
                         .requestMatchers("/api/**").hasAuthority(FirebaseAuthenticationFilter.AUTHORITY_STAFF)
                         .anyRequest().denyAll())

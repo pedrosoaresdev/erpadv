@@ -5,6 +5,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatTabsModule } from '@angular/material/tabs';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { Employee } from '../../core/models/models';
@@ -14,21 +15,25 @@ import { EmptyStateComponent, PageHeaderComponent } from '../../shared/component
 import { USER_STATUS_LABELS } from '../../shared/labels';
 import { RelativeTimePipe } from '../../shared/pipes/format.pipes';
 import { CasesService } from '../cases/cases.service';
-import { EmployeeEditDialogComponent, InviteDialogComponent } from './employee-dialogs';
-import { EmployeesService } from './employees.service';
+import { PasswordDialogComponent } from '../../shared/components/password-dialog';
+import { EmployeeEditDialogComponent, InviteDialogComponent, RoleDialogComponent } from './employee-dialogs';
+import { CustomRole, EmployeesService } from './employees.service';
 
 @Component({
   selector: 'app-employees-list',
-  imports: [MatButtonModule, MatIconModule, MatMenuModule, MatProgressBarModule, RouterLink, PageHeaderComponent, EmptyStateComponent, RelativeTimePipe],
+  imports: [MatButtonModule, MatIconModule, MatMenuModule, MatProgressBarModule, MatTabsModule, RouterLink, PageHeaderComponent, EmptyStateComponent, RelativeTimePipe],
   template: `
     <div class="page">
-      <app-page-header eyebrow="Administração" title="Equipe" subtitle="Usuários, papéis e permissões do escritório.">
+      <app-page-header eyebrow="Administração" title="Equipe" subtitle="Usuários, cargos e permissões do escritório.">
         @if (auth.has('EMPLOYEES_MANAGE')) {
-          <button mat-flat-button (click)="invite()"><mat-icon>person_add</mat-icon>Convidar</button>
+          <button mat-stroked-button (click)="newRole()"><mat-icon>workspace_premium</mat-icon>Novo cargo</button>
+          <button mat-flat-button (click)="invite()"><mat-icon>person_add</mat-icon>Novo integrante</button>
         }
       </app-page-header>
 
-      <div class="card">
+      <mat-tab-group animationDuration="150ms" mat-stretch-tabs="false">
+      <mat-tab [label]="'Integrantes (' + items().length + ')'">
+      <div class="card tab-card">
         @if (loading()) { <mat-progress-bar mode="indeterminate" /> }
         @if (!loading() && items().length === 0) {
           <app-empty-state icon="badge" title="Nenhum integrante" />
@@ -46,7 +51,9 @@ import { EmployeesService } from './employees.service';
                       </div>
                     </td>
                     <td>
-                      {{ e.roleLabel }}
+                      @if (e.customRoleName) {
+                        <span class="role-chip" [style.borderColor]="roleColor(e.customRoleId)"><span class="dot" [style.background]="roleColor(e.customRoleId)"></span>{{ e.customRoleName }}</span>
+                      } @else { {{ e.roleLabel }} }
                       @if (e.permissionsGranted.length || e.permissionsRevoked.length) { <span class="badge gold" title="Permissões ajustadas individualmente">ajustado</span> }
                     </td>
                     <td>{{ e.oabNumber || '—' }}</td>
@@ -56,7 +63,8 @@ import { EmployeesService } from './employees.service';
                       @if (auth.has('EMPLOYEES_MANAGE') && e.uid !== auth.me()?.uid) {
                         <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Ações"><mat-icon>more_vert</mat-icon></button>
                         <mat-menu #menu="matMenu" xPosition="before">
-                          <button mat-menu-item (click)="edit(e)"><mat-icon>manage_accounts</mat-icon>Papel e permissões</button>
+                          <button mat-menu-item (click)="edit(e)"><mat-icon>manage_accounts</mat-icon>Cargo e permissões</button>
+                          <button mat-menu-item (click)="setPassword(e)"><mat-icon>password</mat-icon>Definir nova senha</button>
                           <button mat-menu-item (click)="reset(e)"><mat-icon>key</mat-icon>Gerar link de redefinição de senha</button>
                           <button mat-menu-item (click)="revoke(e)"><mat-icon>logout</mat-icon>Encerrar sessões ativas</button>
                           @if (auth.has('AUDIT_READ')) {
@@ -78,6 +86,42 @@ import { EmployeesService } from './employees.service';
           @if (cursor()) { <div class="more"><button mat-stroked-button (click)="load(true)">Carregar mais</button></div> }
         }
       </div>
+      </mat-tab>
+
+      <mat-tab [label]="'Cargos (' + customRoles().length + ')'">
+        <div class="roles">
+          @for (r of customRoles(); track r.id) {
+            <div class="card role-card" [style.borderTopColor]="r.color || '#7a8ca8'">
+              <div class="row">
+                <span class="dot big" [style.background]="r.color || '#7a8ca8'"></span>
+                <div class="grow">
+                  <div class="name">{{ r.name }}</div>
+                  <div class="muted small">comporta-se como {{ r.baseRoleLabel }}</div>
+                </div>
+                @if (auth.has('EMPLOYEES_MANAGE')) {
+                  <button mat-icon-button [matMenuTriggerFor]="rmenu" aria-label="Ações do cargo"><mat-icon>more_vert</mat-icon></button>
+                  <mat-menu #rmenu="matMenu" xPosition="before">
+                    <button mat-menu-item (click)="editRole(r)"><mat-icon>edit</mat-icon>Editar permissões</button>
+                    <button mat-menu-item class="danger" (click)="deleteRole(r)" [disabled]="r.users > 0"><mat-icon>delete</mat-icon>Excluir{{ r.users > 0 ? ' (em uso)' : '' }}</button>
+                  </mat-menu>
+                }
+              </div>
+              @if (r.description) { <p class="muted desc">{{ r.description }}</p> }
+              <div class="meta">
+                <span><mat-icon>group</mat-icon>{{ r.users }} integrante(s)</span>
+                <span><mat-icon>verified</mat-icon>{{ r.permissions.length }} permissões</span>
+              </div>
+            </div>
+          } @empty {
+            <div class="card tab-card">
+              <app-empty-state icon="workspace_premium" title="Nenhum cargo personalizado"
+                text="Crie cargos como Advogado júnior, Estagiário, Secretário(a) ou Financeiro e escolha exatamente o que cada um acessa." />
+              @if (auth.has('EMPLOYEES_MANAGE')) { <div class="more"><button mat-flat-button (click)="newRole()"><mat-icon>add</mat-icon>Criar primeiro cargo</button></div> }
+            </div>
+          }
+        </div>
+      </mat-tab>
+      </mat-tab-group>
     </div>
   `,
   styles: `
@@ -90,6 +134,17 @@ import { EmployeesService } from './employees.service';
     .danger { color: var(--app-danger); }
     .badge.gold { margin-left: 6px; }
     .more { display: flex; justify-content: center; padding: 16px; }
+    .tab-card { margin-top: 16px; }
+    .roles { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 16px; }
+    .role-card { padding: 16px 18px; border-top: 4px solid; }
+    .grow { flex: 1; min-width: 0; }
+    .desc { font-size: 13px; margin: 10px 0 0; }
+    .meta { display: flex; gap: 16px; margin-top: 12px; font-size: 13px; color: var(--app-text-muted); }
+    .meta span { display: inline-flex; gap: 4px; align-items: center; }
+    .meta mat-icon { font-size: 16px; width: 16px; height: 16px; }
+    .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+    .dot.big { width: 14px; height: 14px; margin: 0; }
+    .role-chip { display: inline-flex; align-items: center; border: 1px solid; border-radius: 999px; padding: 2px 10px; font-size: 13px; }
   `,
 })
 export class EmployeesListComponent {
@@ -104,8 +159,55 @@ export class EmployeesListComponent {
   readonly cursor = signal<string | null>(null);
   readonly loading = signal(false);
 
+  readonly customRoles = signal<CustomRole[]>([]);
+
   constructor() {
     this.load(false);
+    this.loadRoles();
+  }
+
+  loadRoles(): void {
+    this.service.customRoles().subscribe((r) => this.customRoles.set(r));
+  }
+
+  roleColor(id: string | null): string {
+    return this.customRoles().find((r) => r.id === id)?.color || '#7a8ca8';
+  }
+
+  newRole(): void {
+    this.dialog.open(RoleDialogComponent, { data: null, width: '900px', maxWidth: '96vw', disableClose: true })
+      .afterClosed().subscribe((r?: CustomRole) => {
+        if (r) {
+          this.toast.success(`Cargo ${r.name} criado.`);
+          this.loadRoles();
+        }
+      });
+  }
+
+  editRole(role: CustomRole): void {
+    this.dialog.open(RoleDialogComponent, { data: role, width: '900px', maxWidth: '96vw' })
+      .afterClosed().subscribe((r?: CustomRole) => {
+        if (r) {
+          this.toast.success(`Cargo ${r.name} atualizado${r.users ? ' — aplicado a ' + r.users + ' integrante(s)' : ''}.`);
+          this.loadRoles();
+          this.load(false);
+        }
+      });
+  }
+
+  deleteRole(role: CustomRole): void {
+    this.confirm('Excluir cargo', `O cargo ${role.name} será excluído.`, 'Excluir', true).subscribe((ok) => {
+      if (ok) this.service.deleteRole(role.id).subscribe(() => { this.toast.success('Cargo excluído.'); this.loadRoles(); });
+    });
+  }
+
+  setPassword(e: Employee): void {
+    this.dialog.open(PasswordDialogComponent, { data: { title: `Nova senha · ${e.displayName}`, subtitle: e.email }, width: '480px' })
+      .afterClosed().subscribe((password?: string) => {
+        if (password) {
+          this.service.setPassword(e.uid, password).subscribe((u) => { this.replace(u); this.toast.success('Senha definida e sessões encerradas.'); });
+        }
+      });
   }
 
   initials(name: string): string {
@@ -133,6 +235,7 @@ export class EmployeesListComponent {
     this.dialog.open(InviteDialogComponent, { width: '720px', maxWidth: '96vw', disableClose: true }).afterClosed().subscribe((done) => {
       if (done) {
         this.load(false);
+        this.loadRoles();
         this.cases.invalidateLawyers();
       }
     });

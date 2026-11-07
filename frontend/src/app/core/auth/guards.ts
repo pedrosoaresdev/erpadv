@@ -28,6 +28,18 @@ export const staffGuard: CanActivateFn = async () => {
   return home === '/dashboard' ? true : router.parseUrl(home);
 };
 
+/** Painel master da plataforma: somente administradores da plataforma (PLATFORM_ADMIN). */
+export const platformGuard: CanActivateFn = async () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  await auth.ready();
+  let me = auth.me();
+  if (!me && auth.user()) {
+    me = await auth.loadMe().catch(() => null);
+  }
+  return me?.platformAdmin ? true : router.parseUrl(auth.homePath(me));
+};
+
 /** Telas públicas (login, cadastro): quem já está dentro vai para a página inicial. */
 export const guestGuard: CanActivateFn = async () => {
   const auth = inject(AuthService);

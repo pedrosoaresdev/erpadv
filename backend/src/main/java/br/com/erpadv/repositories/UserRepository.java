@@ -78,6 +78,39 @@ public class UserRepository {
                 .toList();
     }
 
+    /** Todos os perfis do escritório (até 500), sem paginação — usado pelo painel master. */
+    public List<UserProfile> allInOffice(String officeId) {
+        return Futures.await(db.collection("users").whereEqualTo("officeId", officeId).limit(500).get())
+                .getDocuments().stream().map(d -> mapper.fromSnapshot(d, UserProfile.class)).toList();
+    }
+
+    public boolean existsCpfInOffice(String officeId, String cpfHash) {
+        return !Futures.await(db.collection("users").whereEqualTo("officeId", officeId)
+                .whereEqualTo("cpfHash", cpfHash).limit(1).get()).isEmpty();
+    }
+
+    public long countByCustomRole(String officeId, String roleId) {
+        return Futures.await(db.collection("users").whereEqualTo("officeId", officeId)
+                .whereEqualTo("customRoleId", roleId).count().get()).getCount();
+    }
+
+    /** Usuários que ocupam licença: ativos e convidados (clientes do portal não contam). */
+    public long countSeats(String officeId) {
+        return Futures.await(db.collection("users").whereEqualTo("officeId", officeId)
+                        .whereIn("status", List.of(UserStatus.ACTIVE.name(), UserStatus.INVITED.name())).limit(1000).get())
+                .getDocuments().stream()
+                .filter(d -> !"CLIENTE".equals(d.getString("role")))
+                .count();
+    }
+
+    public long countAll(UserStatus status) {
+        Query q = db.collection("users");
+        if (status != null) {
+            q = q.whereEqualTo("status", status.name());
+        }
+        return Futures.await(q.count().get()).getCount();
+    }
+
     public long countByOffice(String officeId, UserStatus status) {
         Query q = db.collection("users").whereEqualTo("officeId", officeId);
         if (status != null) {

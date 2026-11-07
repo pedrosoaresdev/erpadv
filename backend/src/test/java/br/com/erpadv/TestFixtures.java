@@ -20,7 +20,8 @@ public final class TestFixtures {
         return new AppProperties(
                 new AppProperties.Firebase("demo-erpadv", null, null, true, null),
                 new AppProperties.Security(ENC_KEY, HMAC_KEY, 300, 60, false, production),
-                new AppProperties.Cors(List.of("http://localhost:4200")));
+                new AppProperties.Cors(List.of("http://localhost:4200")),
+                new AppProperties.Platform(List.of("dev@erpadv.test")));
     }
 
     public static AuthenticatedUser user(String uid, String officeId, Role role) {

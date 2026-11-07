@@ -25,7 +25,9 @@ public final class AuthDtos {
             String role,
             String roleLabel,
             String clientId,
-            List<String> permissions) {
+            List<String> permissions,
+            boolean platformAdmin,
+            String customRoleName) {
     }
 
     public record CreateOfficeRequest(

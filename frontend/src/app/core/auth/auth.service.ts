@@ -137,6 +137,7 @@ export class AuthService {
   homePath(me: Me | null = this.me()): string {
     if (!me) return '/login';
     if (me.emailVerificationRequired) return '/verificar-email';
+    if (me.role === 'MASTER' && !me.officeId) return '/plataforma';
     if (me.onboardingRequired) return '/primeiro-acesso';
     if (me.role === 'CLIENTE') return '/sem-acesso';
     return '/dashboard';

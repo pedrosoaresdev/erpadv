@@ -16,15 +16,20 @@ auditoria). Campos comuns a todas as entidades:
 
 | Coleção | Documento | Principais campos |
 |---|---|---|
-| `users/{uid}` | perfil do usuário | `officeId`, `email`, `displayName`, `role`, `status` (`ACTIVE`/`BLOCKED`/`INVITED`), `permissionsGranted[]`, `permissionsRevoked[]`, `oabNumber`, `phone`, `clientId` (portal), `lastLoginAt`, `tokensRevokedAt` |
-| `offices/{officeId}` | escritório | `name`, `cnpj`, `ownerUid`, `plan`, `status`, `settings{}` |
+| `users/{uid}` | perfil do usuário | `officeId`, `email`, `displayName`, `role` (papel-base), `customRoleId`/`customRoleName` (cargo do escritório), `status` (`ACTIVE`/`BLOCKED`/`INVITED`), `permissionsGranted[]`, `permissionsRevoked[]`, `oabNumber`, `cpfEnc`/`cpfHash`/`cpfMasked`, `phone`, `clientId` (portal), `lastLoginAt`, `tokensRevokedAt` |
+| `offices/{officeId}` | escritório (tenant) | `name`, `nameLower`, `cnpj`, `ownerUid`, `plan` (`ESSENCIAL`/`PROFISSIONAL`/`ENTERPRISE`), `maxUsers`, `status` (`ACTIVE`/`SUSPENDED`), `suspendedAt`, `suspendedReason`, `createdByPlatform` |
 | `permissions/{code}` | catálogo de permissões | `module`, `description` (gerado a partir do enum do backend) |
 
 ## Subcoleções por escritório (`offices/{officeId}/…`)
 
 | Coleção | Uso | Campos-chave |
 |---|---|---|
-| `roles` | papéis personalizados do escritório | `name`, `basedOn`, `permissions[]` |
+| `roles` | cargos personalizados (ex.: Advogado júnior) | `name`, `nameLower`, `description`, `color`, `baseRole`, `permissions[]` |
+| `boards` | quadros Kanban | `name`, `color`, `visibility` (`OFFICE`/`MEMBERS`), `ownerUid`, `memberUids[]`, `columns[]` (`id`, `name`, `wipLimit`, `done`, `automation{notifyAssignees, addLabelId, assignUid, setDueInDays}`), `labels[]`, `archived` |
+| `board_cards` | cartões | `boardId`, `columnId`, `position` (fracionária), `title`, `assigneeUids[]`, `labelIds[]`, `priority`, `startDate`, `dueDate`, `completed`, `completedAt`, `checklist[]`, `clientId`, `caseId`, `deadlineId`, `columnEnteredAt`, `commentCount`, `archived` |
+| `card_activity` | comentários e eventos dos cartões | `cardId`, `boardId`, `kind` (`COMMENT`/`EVENT`), `text`, `mentionUids[]`, `actorUid`, `at` |
+| `leads` | CRM comercial (funil) | `name`, `type`, `company`, `phone`, `email`, `source`, `legalArea`, `subject`, `stage` (`NOVO`…`GANHO`/`PERDIDO`), `estimatedValueCents`, `ownerUid`, `nextAction`, `nextActionDate`, `lostReason`, `tags[]`, `stageEnteredAt`, `lastActivityAt`, `wonAt`, `lostAt`, `convertedClientId` — sem CPF/CNPJ (coletado só na conversão) |
+| `lead_activities` | interações com a oportunidade | `leadId`, `type`, `text`, `actorUid`, `at` |
 | `clients` | CRM | `type` (`PF`/`PJ`), `name`, `nameLower`, `documentEnc`, `documentHash`, `documentMasked`, `rgEnc`, `birthDate`, `phone`, `whatsapp`, `email`, `address{}`, `profession`, `maritalStatus`, `notes`, `status`, `defaulting`, `searchTokens[]` |
 | `clients/{id}/interactions` | histórico de atendimentos | `channel`, `subject`, `description`, `occurredAt`, `userUid`, `userName` |
 | `cases` | processos | `cnjNumber`, `clientId`, `clientName`, `opposingParty`, `court`, `courtDivision`, `district`, `state`, `area`, `proceduralClass`, `subject`, `responsibleUid`, `responsibleName`, `claimValueCents`, `distributionDate`, `status`, `notes`, `confidential`, `searchTokens[]` |

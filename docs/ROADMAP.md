@@ -18,13 +18,16 @@ Legenda: ✅ concluída · 🟡 parcial · ⏳ pendente
 | 12 | Departamento criminal (custodiados, inquéritos, cautelares) | ⏳ |
 | 13 | IA jurídica (6 agentes via backend, regras de não-alucinação, revisão humana) | ⏳ |
 | 14 | Portal do cliente | ⏳ |
-| 15 | Painel Master / TI | 🟡 (auditoria e gestão de usuários prontas) |
+| 15 | Painel Master / TI | 🟡 (painel da plataforma, cargos personalizados, auditoria e gestão de usuários prontos; relatórios pendentes) |
+| + | Quadros Kanban jurídicos (WIP, automações, indicadores, cartão → prazo) e CRM comercial (funil, pontuação, conversão em cliente, métricas) | ✅ |
 | 16 | Docker, Nginx (HTTPS), Compose com Emulator Suite | ✅ |
 | 17 | Testes e segurança (ampliação contínua a cada etapa) | 🟡 |
 
 ## O que falta (registrado ao fim desta entrega)
 
-* **Próxima entrega (pedido do usuário):** painel do desenvolvedor (master) para criar escritórios e o advogado administrador (OAB, nome, CPF, senha); cargos personalizados com permissões criados pelo dono do escritório; quadros Kanban avançados (estilo Trello) e CRM comercial (funil de captação).
+* Quadros: anexos diretos no cartão (hoje o vínculo é com cliente/processo, cujos documentos ficam no repositório), lembretes automáticos de vencimento dos cartões e quadros-modelo criados pelo próprio escritório.
+* CRM: captura automática de leads (formulário do site/WhatsApp) e envio de e-mail ao lead dependem de integração externa.
+* Painel da plataforma: cobrança/faturamento dos planos e métricas de uso por escritório.
 * Módulos das etapas 12–14 (rotas aparecem desabilitadas na sidebar com a etapa indicada).
 * Assinatura eletrônica com certificado ICP-Brasil e antivírus nos uploads.
 * Financeiro: DRE em regime de competência, conciliação bancária (OFX) e emissão de boletos/Pix dependem de integração com instituição financeira.

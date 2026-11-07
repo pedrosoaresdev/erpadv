@@ -58,15 +58,23 @@ public class AuthService {
 
     public MeResponse me(AuthenticatedUser user) {
         boolean verificationRequired = properties.security().requireEmailVerified() && !user.emailVerified();
+        boolean platformAdmin = user.has(br.com.erpadv.security.Permission.PLATFORM_ADMIN);
         if (!user.hasOffice()) {
+            if (user.role() == Role.MASTER) {
+                return new MeResponse(user.uid(), user.email(), user.name(), user.emailVerified(), false, false,
+                        null, "Plataforma ERPAdv", Role.MASTER.name(), Role.MASTER.label(), null,
+                        user.permissions().stream().map(Enum::name).sorted().toList(), true, null);
+            }
             return new MeResponse(user.uid(), user.email(), user.name(), user.emailVerified(), true,
-                    verificationRequired, null, null, null, null, null, java.util.List.of());
+                    verificationRequired, null, null, null, null, null, java.util.List.of(), false, null);
         }
         String officeName = offices.findById(user.officeId()).map(Office::getName).orElse(null);
-        String name = users.findById(user.uid()).map(UserProfile::getDisplayName).orElse(user.name());
+        var profile = users.findById(user.uid());
+        String name = profile.map(UserProfile::getDisplayName).orElse(user.name());
+        String customRole = profile.map(UserProfile::getCustomRoleName).orElse(null);
         return new MeResponse(user.uid(), user.email(), name, user.emailVerified(), false, verificationRequired,
                 user.officeId(), officeName, user.role().name(), user.role().label(), user.clientId(),
-                user.permissions().stream().map(Enum::name).sorted().toList());
+                user.permissions().stream().map(Enum::name).sorted().toList(), platformAdmin, customRole);
     }
 
     /** Chamado pelo front logo após o login: registra o acesso e ativa contas convidadas. */
@@ -88,6 +96,9 @@ public class AuthService {
     }
 
     public OfficeCreatedResponse createOffice(AuthenticatedUser user, CreateOfficeRequest req) {
+        if (user.role() == Role.MASTER) {
+            throw new BusinessException("PLATFORM_ACCOUNT", "Conta da plataforma: crie escritórios pelo painel master.");
+        }
         if (properties.security().requireEmailVerified() && !user.emailVerified()) {
             throw new BusinessException("EMAIL_NOT_VERIFIED", "Confirme seu e-mail antes de criar o escritório.");
         }
@@ -109,6 +120,7 @@ public class AuthService {
         office.setId(officeRef.getId());
         office.setOfficeId(officeRef.getId());
         office.setName(req.name().trim());
+        office.setNameLower(SearchTokens.normalize(req.name()));
         office.setCnpj(req.cnpj() == null || req.cnpj().isBlank() ? null : BrazilianDocuments.format(req.cnpj()));
         office.setEmail(req.email());
         office.setPhone(req.phone());

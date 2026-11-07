@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard, guestGuard, permissionGuard, staffGuard } from './core/auth/guards';
+import { authGuard, guestGuard, permissionGuard, platformGuard, staffGuard } from './core/auth/guards';
 import { AuthLayoutComponent } from './layouts/auth-layout/auth-layout';
 import { MainLayoutComponent } from './layouts/main-layout/main-layout';
 
@@ -10,6 +10,15 @@ export const routes: Routes = [
     canActivate: [authGuard],
     title: 'Sem acesso · ERPAdv',
     loadComponent: () => import('./modules/placeholder/no-access').then((m) => m.NoAccessComponent),
+  },
+  {
+    path: 'plataforma',
+    component: MainLayoutComponent,
+    canActivate: [authGuard, platformGuard],
+    children: [
+      { path: '', title: 'Plataforma · ERPAdv',
+        loadComponent: () => import('./modules/platform/platform-page').then((m) => m.PlatformPageComponent) },
+    ],
   },
   {
     path: '',
@@ -35,6 +44,12 @@ export const routes: Routes = [
         loadComponent: () => import('./modules/contracts/contracts-list').then((m) => m.ContractsListComponent) },
       { path: 'contratos/:id', canActivate: [permissionGuard], data: { permission: 'CONTRACTS_READ' }, title: 'Contrato · ERPAdv',
         loadComponent: () => import('./modules/contracts/contract-detail').then((m) => m.ContractDetailComponent) },
+      { path: 'quadros', canActivate: [permissionGuard], data: { permission: 'BOARDS_USE' }, title: 'Quadros · ERPAdv',
+        loadComponent: () => import('./modules/boards/boards-list').then((m) => m.BoardsListComponent) },
+      { path: 'quadros/:id', canActivate: [permissionGuard], data: { permission: 'BOARDS_USE' }, title: 'Quadro · ERPAdv',
+        loadComponent: () => import('./modules/boards/board-view').then((m) => m.BoardViewComponent) },
+      { path: 'crm', canActivate: [permissionGuard], data: { permission: 'CRM_USE' }, title: 'CRM · ERPAdv',
+        loadComponent: () => import('./modules/crm/crm-page').then((m) => m.CrmPageComponent) },
       { path: 'equipe', canActivate: [permissionGuard], data: { permission: 'EMPLOYEES_READ' }, title: 'Equipe · ERPAdv',
         loadComponent: () => import('./modules/employees/employees-list').then((m) => m.EmployeesListComponent) },
       { path: 'auditoria', canActivate: [permissionGuard], data: { permission: 'AUDIT_READ' }, title: 'Auditoria · ERPAdv',

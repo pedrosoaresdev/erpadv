@@ -36,6 +36,8 @@ public enum Permission {
 
     AI_USE("ai", "Usar agentes de inteligência artificial"),
     MESSAGES_USE("communication", "Comunicação interna"),
+    BOARDS_USE("boards", "Quadros de tarefas (Kanban)"),
+    CRM_USE("crm", "CRM comercial (funil de captação)"),
     REPORTS_VIEW("reports", "Emitir relatórios"),
 
     EMPLOYEES_READ("employees", "Consultar equipe"),

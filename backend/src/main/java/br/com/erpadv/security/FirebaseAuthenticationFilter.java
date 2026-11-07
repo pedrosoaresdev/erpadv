@@ -1,5 +1,6 @@
 package br.com.erpadv.security;
 
+import br.com.erpadv.config.AppProperties;
 import br.com.erpadv.exceptions.ProblemFactory;
 import br.com.erpadv.models.UserProfile;
 import br.com.erpadv.models.UserStatus;
@@ -23,6 +24,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -31,7 +33,8 @@ import java.util.Set;
 /**
  * Valida o ID token do Firebase (JWT) enviado em {@code Authorization: Bearer} e monta o
  * {@link AuthenticatedUser}. Rejeita contas bloqueadas, sessões revogadas e tokens cujo escritório
- * não confere com o perfil persistido.
+ * não confere com o perfil persistido, além de escritórios suspensos pela plataforma. E-mails listados em
+ * {@code app.platform.master-emails} recebem o papel MASTER (painel do desenvolvedor da plataforma).
  */
 public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
 
@@ -41,12 +44,20 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
 
     private final FirebaseAuth firebaseAuth;
     private final UserProfileCache profiles;
+    private final PermissionResolver permissionResolver;
+    private final OfficeStatusCache officeStatus;
     private final ProblemFactory problems;
+    private final AppProperties properties;
 
-    public FirebaseAuthenticationFilter(FirebaseAuth firebaseAuth, UserProfileCache profiles, ProblemFactory problems) {
+    public FirebaseAuthenticationFilter(FirebaseAuth firebaseAuth, UserProfileCache profiles,
+                                        PermissionResolver permissionResolver, OfficeStatusCache officeStatus,
+                                        ProblemFactory problems, AppProperties properties) {
         this.firebaseAuth = firebaseAuth;
         this.profiles = profiles;
+        this.permissionResolver = permissionResolver;
+        this.officeStatus = officeStatus;
         this.problems = problems;
+        this.properties = properties;
     }
 
     @Override
@@ -73,6 +84,7 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
         String clientId = claims.get("clientId") instanceof String s ? s : null;
         Set<Permission> permissions = Set.of();
         String displayName = token.getName();
+        boolean master = isPlatformMaster(token);
 
         if (officeId != null && role != null) {
             Optional<UserProfile> profileOpt = profiles.get(token.getUid());
@@ -90,11 +102,30 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
                 problems.write(response, HttpStatus.UNAUTHORIZED, "SESSION_REVOKED", "Sessão encerrada pelo administrador.");
                 return;
             }
+            if (!master && officeStatus.isSuspended(officeId)) {
+                problems.write(response, HttpStatus.FORBIDDEN, "OFFICE_SUSPENDED",
+                        "Escritório suspenso. Entre em contato com o suporte da plataforma.");
+                return;
+            }
             // O papel vigente é o do perfil (claims podem estar defasados até a renovação do token).
             role = profile.getRole() != null ? profile.getRole() : role;
-            permissions = RolePermissions.effective(role, profile.getPermissionsGranted(), profile.getPermissionsRevoked());
+            profile.setRole(role);
+            permissions = permissionResolver.resolve(profile);
             if (profile.getDisplayName() != null && !profile.getDisplayName().isBlank()) {
                 displayName = profile.getDisplayName();
+            }
+        }
+
+        if (master) {
+            if (officeId == null || role == null) {
+                // Desenvolvedor da plataforma sem escritório: acesso somente ao painel master.
+                officeId = null;
+                role = Role.MASTER;
+                permissions = EnumSet.of(Permission.PLATFORM_ADMIN);
+            } else {
+                EnumSet<Permission> extended = permissions.isEmpty() ? EnumSet.noneOf(Permission.class) : EnumSet.copyOf(permissions);
+                extended.add(Permission.PLATFORM_ADMIN);
+                permissions = extended;
             }
         }
 
@@ -120,6 +151,14 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
             MDC.put("officeId", officeId);
         }
         chain.doFilter(request, response);
+    }
+
+    private boolean isPlatformMaster(FirebaseToken token) {
+        AppProperties.Platform platform = properties.platform();
+        if (platform == null || !platform.isMaster(token.getEmail())) {
+            return false;
+        }
+        return token.isEmailVerified() || !properties.security().requireEmailVerified();
     }
 
     private boolean isRevoked(Map<String, Object> claims, UserProfile profile) {

@@ -6,7 +6,7 @@
   "scripts": {
     "emulators": "firebase emulators:start --project demo-erpadv",
     "test:rules": "firebase emulators:exec --project demo-erpadv --only firestore,storage \"node --test tests/*.test.js\"",
-    "test:backend-e2e": "firebase emulators:exec --project demo-erpadv --only auth,firestore,storage \"mvn -B -f ../backend/pom.xml test -Dtest=EmulatorEndToEndTest -Dsurefire.failIfNoSpecifiedTests=false\""
+    "test:backend-e2e": "firebase emulators:exec --project demo-erpadv --only auth,firestore,storage \"mvn -B -f ../backend/pom.xml test -Dtest=*EndToEndTest -Dsurefire.failIfNoSpecifiedTests=false\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^6.0.0",

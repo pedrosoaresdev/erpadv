@@ -117,6 +117,8 @@ export const MODULE_LABELS: Record<string, string> = {
   ai: 'Inteligência artificial',
   communication: 'Comunicação',
   reports: 'Relatórios',
+  boards: 'Quadros',
+  crm: 'CRM comercial',
   employees: 'Equipe',
   admin: 'Administração',
 };

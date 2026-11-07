@@ -73,6 +73,9 @@ app:
     enabled: ${JOBS_ENABLED:true}
     deadline-alerts-cron: ${DEADLINE_ALERTS_CRON:0 5 * * * *}
     appointment-reminders-ms: ${APPOINTMENT_REMINDERS_MS:300000}
+  platform:
+    # E-mails com acesso ao painel master (desenvolvedor). Separados por vírgula.
+    master-emails: ${PLATFORM_MASTER_EMAILS:}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
 

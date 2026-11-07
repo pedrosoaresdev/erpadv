@@ -23,6 +23,13 @@ public class UserProfile extends BaseEntity {
     private String oabNumber;
     private String phone;
     private String position;
+    /** CPF criptografado (cadastro pelo painel master / equipe). */
+    private String cpfEnc;
+    private String cpfHash;
+    private String cpfMasked;
+    /** Cargo personalizado do escritório (permissões vêm do cargo). */
+    private String customRoleId;
+    private String customRoleName;
     /** Preenchido apenas para usuários do portal do cliente. */
     private String clientId;
     private Instant invitedAt;

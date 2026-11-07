@@ -23,6 +23,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Processos', icon: 'gavel', route: '/processos', permission: 'CASES_READ' },
       { label: 'Prazos', icon: 'alarm', route: '/prazos', permission: 'DEADLINES_READ' },
       { label: 'Agenda', icon: 'calendar_month', route: '/agenda', permission: 'CALENDAR_READ' },
+      { label: 'Quadros', icon: 'view_kanban', route: '/quadros', permission: 'BOARDS_USE' },
+      { label: 'CRM', icon: 'filter_alt', route: '/crm', permission: 'CRM_USE' },
     ],
   },
   {
@@ -42,7 +44,12 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: 'Equipe', icon: 'badge', route: '/equipe', permission: 'EMPLOYEES_READ' },
       { label: 'Auditoria', icon: 'verified_user', route: '/auditoria', permission: 'AUDIT_READ' },
-      { label: 'Painel Master', icon: 'admin_panel_settings', permission: 'ADMIN_PANEL', stage: 15 },
+    ],
+  },
+  {
+    title: 'Plataforma',
+    items: [
+      { label: 'Escritórios', icon: 'admin_panel_settings', route: '/plataforma', permission: 'PLATFORM_ADMIN' },
     ],
   },
 ];

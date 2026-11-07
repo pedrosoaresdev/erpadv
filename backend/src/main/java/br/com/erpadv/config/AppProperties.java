@@ -9,7 +9,15 @@ import java.util.List;
  * de ambiente — ver {@code .env.example} na raiz do projeto.
  */
 @ConfigurationProperties(prefix = "app")
-public record AppProperties(Firebase firebase, Security security, Cors cors) {
+public record AppProperties(Firebase firebase, Security security, Cors cors, Platform platform) {
+
+    /** @param masterEmails e-mails dos administradores da plataforma (painel do desenvolvedor). */
+    public record Platform(List<String> masterEmails) {
+        public boolean isMaster(String email) {
+            return email != null && masterEmails != null
+                    && masterEmails.stream().anyMatch(m -> m != null && m.trim().equalsIgnoreCase(email.trim()));
+        }
+    }
 
     /**
      * @param emulatorPublicAuthUrl URL do Auth Emulator vista pelo navegador (ex.: http://localhost:9099),

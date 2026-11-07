@@ -9,6 +9,7 @@ import br.com.erpadv.dto.EmployeeDtos.InviteResponse;
 import br.com.erpadv.dto.EmployeeDtos.PermissionInfo;
 import br.com.erpadv.dto.EmployeeDtos.ResetLinkResponse;
 import br.com.erpadv.dto.EmployeeDtos.RoleInfo;
+import br.com.erpadv.dto.EmployeeDtos.SetPasswordRequest;
 import br.com.erpadv.dto.EmployeeDtos.UpdateEmployeeRequest;
 import br.com.erpadv.security.AuthenticatedUser;
 import br.com.erpadv.services.EmployeeService;
@@ -107,6 +108,13 @@ public class EmployeeController {
     @PreAuthorize("hasAuthority('PERM_EMPLOYEES_MANAGE')")
     public EmployeeResponse revokeSessions(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String uid) {
         return employees.revokeSessions(user, uid);
+    }
+
+    @PostMapping("/{uid}/password")
+    @PreAuthorize("hasAuthority('PERM_EMPLOYEES_MANAGE')")
+    public EmployeeResponse setPassword(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String uid,
+                                        @Valid @RequestBody SetPasswordRequest request) {
+        return employees.setPassword(user, uid, request.password());
     }
 
     @PostMapping("/{uid}/reset-access")
