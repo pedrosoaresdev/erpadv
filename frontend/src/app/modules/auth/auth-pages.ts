@@ -55,7 +55,7 @@ const AUTH_IMPORTS = [
       </form>
       <div class="links">
         <a routerLink="/recuperar-senha">Esqueci minha senha</a>
-        <a routerLink="/cadastro">Criar escritório</a>
+        <a routerLink="/cadastro">Criar conta</a>
       </div>
     </div>
   `,
