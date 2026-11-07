@@ -172,6 +172,72 @@ public class CaseService {
         return CaseResponse.of(legalCase);
     }
 
+    /** Duplica o cadastro (sem número CNJ, movimentações ou vínculos) — útil para processos conexos/recursos. */
+    public CaseResponse duplicate(AuthenticatedUser user, String id) {
+        LegalCase source = load(user, id);
+        CaseRequest req = new CaseRequest(null, source.getClientId(), source.getOpposingParty(), source.getCourt(),
+                source.getCourtDivision(), source.getDistrict(), source.getState(), source.getArea(),
+                source.getProceduralClass(), source.getSubject(), source.getResponsibleUid(), source.getClaimValueCents(),
+                null, CaseStatus.EM_ANDAMENTO, "Cadastro duplicado de " + (source.getCnjNumber() == null ? "processo sem número" : source.getCnjNumber())
+                + (source.getNotes() == null ? "" : "\n\n" + source.getNotes()), source.isConfidential(),
+                source.getActiveParty(), source.getPassiveParty(), source.getInstance(), source.getJudgingBody(),
+                source.getSecondarySubjects(), source.isFreeJustice(), source.getPhase());
+        CaseResponse created = create(user, req);
+        audit.record(user, "CASE_DUPLICATED", "case", created.id(), "Processo duplicado a partir de " + id, Map.of("sourceId", id));
+        return created;
+    }
+
+    /** Coleções que impedem a exclusão (guarda obrigatória). */
+    static final Map<String, String> LINKS = new java.util.LinkedHashMap<>(Map.of(
+            "deadlines", "prazo(s)", "appointments", "compromisso(s)", "documents", "documento(s)",
+            "financial_transactions", "lançamento(s) financeiro(s)", "contracts", "contrato(s)"));
+
+    public Map<String, Long> links(AuthenticatedUser user, String id) {
+        load(user, id);
+        var office = cases.collection(user.officeId()).getParent();
+        Map<String, com.google.api.core.ApiFuture<com.google.cloud.firestore.AggregateQuerySnapshot>> f = new java.util.LinkedHashMap<>();
+        LINKS.keySet().forEach(col -> f.put(col, office.collection(col).whereEqualTo("caseId", id).count().get()));
+        Map<String, Long> counts = new java.util.LinkedHashMap<>();
+        f.forEach((k, v) -> counts.put(k, br.com.erpadv.firebase.Futures.await(v).getCount()));
+        return counts;
+    }
+
+    /**
+     * Exclusão definitiva conforme política de retenção: somente processos já arquivados e sem prazos,
+     * compromissos, documentos, lançamentos ou contratos vinculados. A exclusão fica na auditoria.
+     */
+    public void delete(AuthenticatedUser user, String id, String reason) {
+        LegalCase legalCase = load(user, id);
+        if (!legalCase.isArchived()) {
+            throw new BusinessException("CASE_NOT_ARCHIVED", "Arquive o processo antes de excluí-lo.");
+        }
+        List<String> blocking = links(user, id).entrySet().stream().filter(e -> e.getValue() > 0)
+                .map(e -> e.getValue() + " " + LINKS.get(e.getKey())).toList();
+        if (!blocking.isEmpty()) {
+            throw new ConflictException("CASE_HAS_LINKS", "Processo com " + String.join(", ", blocking)
+                    + ". Mantenha-o arquivado (obrigação de guarda).");
+        }
+        for (CaseMovement m : movements.list(movements.collection(user.officeId()).whereEqualTo("caseId", id), 500)) {
+            br.com.erpadv.firebase.Futures.await(movements.collection(user.officeId()).document(m.getId()).delete());
+        }
+        br.com.erpadv.firebase.Futures.await(cases.collection(user.officeId()).document(id).delete());
+        audit.record(user, "CASE_DELETED", "case", id, "Processo excluído: " + (legalCase.getCnjNumber() == null ? "sem número" : legalCase.getCnjNumber()),
+                Map.of("reason", reason == null ? "" : reason, "clientId", legalCase.getClientId()));
+    }
+
+    /** Todas as movimentações (até 1000) para relatórios. */
+    public List<CaseMovement> allMovements(AuthenticatedUser user, String id) {
+        load(user, id);
+        List<CaseMovement> all = new ArrayList<>();
+        String cursor = null;
+        do {
+            CursorPage<CaseMovement> page = movements.byCase(user.officeId(), id, cursor, 100);
+            all.addAll(page.items());
+            cursor = page.nextCursor();
+        } while (cursor != null && all.size() < 1000);
+        return all;
+    }
+
     public CaseResponse archive(AuthenticatedUser user, String id) {
         LegalCase legalCase = load(user, id);
         if (legalCase.isArchived()) {
@@ -224,7 +290,33 @@ public class CaseService {
         }
         CaseMovement movement = newMovement(user, legalCase, req.type(), req.date(), req.title().trim(),
                 req.description() == null ? null : req.description().trim());
+        movement.setImportant(req.important() || req.type() == MovementType.SENTENCA || req.type() == MovementType.ACORDAO
+                || req.type() == MovementType.TRANSITO_JULGADO || req.type() == MovementType.DECISAO);
         movements.save(user.officeId(), movement);
+        legalCase.setLastMovementAt(Instant.now());
+        // Registros estruturados a partir das movimentações-chave.
+        if (req.type() == MovementType.SENTENCA && legalCase.getSentenceDate() == null) {
+            legalCase.setSentenceDate(req.date());
+            if (legalCase.getPhase() == null || legalCase.getPhase().ordinal() < br.com.erpadv.models.CasePhase.DECISORIA.ordinal()) {
+                legalCase.setPhase(br.com.erpadv.models.CasePhase.DECISORIA);
+            }
+        }
+        if (req.type() == MovementType.RECURSO && legalCase.getStatus() == CaseStatus.EM_ANDAMENTO) {
+            legalCase.setStatus(CaseStatus.EM_RECURSO);
+            legalCase.setPhase(br.com.erpadv.models.CasePhase.RECURSAL);
+        }
+        if (req.type() == MovementType.TRANSITO_JULGADO) {
+            legalCase.setFinalJudgmentDate(req.date());
+        }
+        if (req.type() == MovementType.SUSPENSAO && legalCase.getStatus().isActive()) {
+            legalCase.setStatus(CaseStatus.SUSPENSO);
+        }
+        if (movement.isImportant() && legalCase.getResponsibleUid() != null && !legalCase.getResponsibleUid().equals(user.uid())) {
+            notifications.notify(user.officeId(), legalCase.getResponsibleUid(), "CASE_MOVEMENT",
+                    req.type().label() + " registrada no processo",
+                    (legalCase.getCnjNumber() == null ? legalCase.getClientName() : legalCase.getCnjNumber()) + " — " + movement.getTitle(),
+                    "/processos/" + legalCase.getId());
+        }
         legalCase.setUpdatedAt(Instant.now());
         legalCase.setUpdatedBy(user.uid());
         cases.save(user.officeId(), legalCase);
@@ -288,6 +380,31 @@ public class CaseService {
         c.setNotes(trim(req.notes()));
         c.setConfidential(req.confidential());
         c.setRestricted(restricted);
+        c.setActiveParty(trim(req.activeParty()));
+        c.setPassiveParty(trim(req.passiveParty()));
+        c.setInstance(trim(req.instance()));
+        c.setJudgingBody(trim(req.judgingBody()));
+        c.setSecondarySubjects(req.secondarySubjects() == null ? new ArrayList<>()
+                : req.secondarySubjects().stream().filter(this::notBlankStr).map(String::trim).distinct().toList());
+        c.setFreeJustice(req.freeJustice());
+        c.setPhase(req.phase());
+        c.setLawyerOab(responsible.getOabNumber());
+        // Histórico de responsáveis: fecha o período anterior e abre o novo.
+        List<br.com.erpadv.models.ResponsibleChange> history = new ArrayList<>(c.getResponsibleHistory() == null ? List.of() : c.getResponsibleHistory());
+        br.com.erpadv.models.ResponsibleChange current = history.isEmpty() ? null : history.get(history.size() - 1);
+        if (current == null || !responsible.getId().equals(current.getUid())) {
+            Instant now = Instant.now();
+            if (current != null && current.getTo() == null) {
+                current.setTo(now);
+            }
+            br.com.erpadv.models.ResponsibleChange change = new br.com.erpadv.models.ResponsibleChange();
+            change.setUid(responsible.getId());
+            change.setName(responsible.getDisplayName());
+            change.setFrom(now);
+            change.setChangedBy(user.uid());
+            history.add(change);
+        }
+        c.setResponsibleHistory(history);
         c.setSearchTokens(buildTokens(c));
     }
 
@@ -298,6 +415,8 @@ public class CaseService {
         }
         tokens.addAll(SearchTokens.forText(c.getClientName()));
         tokens.addAll(SearchTokens.forText(c.getOpposingParty()));
+        tokens.addAll(SearchTokens.forText(c.getActiveParty()));
+        tokens.addAll(SearchTokens.forText(c.getPassiveParty()));
         tokens.addAll(SearchTokens.forText(c.getSubject()));
         List<String> list = new ArrayList<>(tokens);
         return list.subList(0, Math.min(list.size(), 400));
@@ -338,6 +457,10 @@ public class CaseService {
         m.setCreatedBy(user.uid());
         m.setSortKey(date + "T" + String.format("%013d", now.toEpochMilli()));
         return m;
+    }
+
+    private boolean notBlankStr(String value) {
+        return value != null && !value.isBlank();
     }
 
     private static boolean notBlank(String value) {

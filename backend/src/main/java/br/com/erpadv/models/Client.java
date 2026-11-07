@@ -34,6 +34,18 @@ public class Client extends BaseEntity {
     /** Inadimplência marcada automaticamente pelo financeiro (contas a receber vencidas). */
     private boolean defaultingAuto;
     private String responsibleUid;
+    private String nationality;
+    /** PJ: inscrições estadual e municipal, representante legal e contatos. */
+    private String stateRegistration;
+    private String municipalRegistration;
+    private String legalRepresentative;
+    private String legalRepresentativeRole;
+    private List<ClientContact> contacts = new ArrayList<>();
+    /** Origem do cliente (mesmos códigos do CRM: INDICACAO, SITE, GOOGLE…). */
+    private String source;
+    private String sourceDetail;
+    /** Último atendimento/movimentação relevante (para "sem movimentação recente"). */
+    private Instant lastActivityAt;
     private Instant inactivatedAt;
     private String inactivationReason;
     private List<String> searchTokens = new ArrayList<>();

@@ -34,7 +34,7 @@ export class NotificationService {
       collection(this.firebase.firestore, 'offices', officeId, 'notifications'),
       where('recipientUid', '==', uid),
       orderBy('createdAt', 'desc'),
-      limit(20),
+      limit(100),
     );
     this.unsubscribe = onSnapshot(
       q,
@@ -45,6 +45,7 @@ export class NotificationService {
             const data = d.data();
             return {
               id: d.id,
+              type: String(data['type'] ?? ''),
               title: String(data['title'] ?? ''),
               body: String(data['body'] ?? ''),
               link: (data['link'] as string | undefined) ?? null,

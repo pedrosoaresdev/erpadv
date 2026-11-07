@@ -6,6 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MovementType } from '../../core/models/models';
 import { MOVEMENT_LABELS, enumOptions } from '../../shared/labels';
 import { CasesService } from './cases.service';
@@ -18,7 +19,8 @@ const todayLocal = () => {
 /** Registro de movimentação, decisão, despacho, sentença etc. */
 @Component({
   selector: 'app-movement-dialog',
-  imports: [ReactiveFormsModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule, MatIconModule],
+  imports: [ReactiveFormsModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule, MatIconModule, MatCheckboxModule],
+  styles: `.imp { grid-column: span 12; display: flex; flex-direction: column; gap: 2px; } .small { font-size: 12px; padding-left: 8px; }`,
   template: `
     <h2 mat-dialog-title class="dialog-title"><mat-icon>post_add</mat-icon>Registrar andamento</h2>
     <mat-dialog-content>
@@ -43,6 +45,11 @@ const todayLocal = () => {
           <mat-label>Teor / descrição</mat-label>
           <textarea matInput rows="6" formControlName="description" maxlength="8000"></textarea>
         </mat-form-field>
+        <div class="imp">
+          <mat-checkbox formControlName="important">Marcar como importante (destaque e aviso ao responsável)</mat-checkbox>
+          <span class="muted small">Sentenças, acórdãos, decisões e trânsito em julgado são importantes automaticamente.
+            Recurso muda a situação para "Em recurso"; suspensão, para "Suspenso".</span>
+        </div>
       </form>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
@@ -63,6 +70,7 @@ export class MovementDialogComponent {
     date: [todayLocal(), Validators.required],
     title: ['', [Validators.required, Validators.maxLength(200)]],
     description: [''],
+    important: [false],
   });
 
   save(): void {
@@ -73,7 +81,7 @@ export class MovementDialogComponent {
     const v = this.form.getRawValue();
     this.saving.set(true);
     this.service
-      .addMovement(this.caseId, { type: v.type, date: v.date, title: v.title.trim(), description: v.description.trim() || null })
+      .addMovement(this.caseId, { type: v.type, date: v.date, title: v.title.trim(), description: v.description.trim() || null, important: v.important })
       .subscribe({ next: (m) => this.ref.close(m), error: () => this.saving.set(false) });
   }
 }

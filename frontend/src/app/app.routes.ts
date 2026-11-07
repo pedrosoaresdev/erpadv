@@ -50,6 +50,8 @@ export const routes: Routes = [
         loadComponent: () => import('./modules/boards/board-view').then((m) => m.BoardViewComponent) },
       { path: 'crm', canActivate: [permissionGuard], data: { permission: 'CRM_USE' }, title: 'CRM · ERPAdv',
         loadComponent: () => import('./modules/crm/crm-page').then((m) => m.CrmPageComponent) },
+      { path: 'notificacoes', title: 'Notificações · ERPAdv',
+        loadComponent: () => import('./modules/notifications/notifications-page').then((m) => m.NotificationsPageComponent) },
       { path: 'equipe', canActivate: [permissionGuard], data: { permission: 'EMPLOYEES_READ' }, title: 'Equipe · ERPAdv',
         loadComponent: () => import('./modules/employees/employees-list').then((m) => m.EmployeesListComponent) },
       { path: 'auditoria', canActivate: [permissionGuard], data: { permission: 'AUDIT_READ' }, title: 'Auditoria · ERPAdv',

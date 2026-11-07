@@ -51,6 +51,9 @@ export const MOVEMENT_LABELS: Record<MovementType, string> = {
   DESPACHO: 'Despacho',
   DECISAO: 'Decisão',
   SENTENCA: 'Sentença',
+  RECURSO: 'Recurso',
+  TRANSITO_JULGADO: 'Trânsito em julgado',
+  SUSPENSAO: 'Suspensão',
   ACORDAO: 'Acórdão',
   AUDIENCIA: 'Audiência',
   PETICAO: 'Petição',
@@ -63,6 +66,9 @@ export const MOVEMENT_ICONS: Record<MovementType, string> = {
   DESPACHO: 'assignment',
   DECISAO: 'gavel',
   SENTENCA: 'balance',
+  RECURSO: 'call_split',
+  TRANSITO_JULGADO: 'verified',
+  SUSPENSAO: 'pause_circle',
   ACORDAO: 'account_balance',
   AUDIENCIA: 'groups',
   PETICAO: 'description',
@@ -122,6 +128,18 @@ export const MODULE_LABELS: Record<string, string> = {
   employees: 'Equipe',
   admin: 'Administração',
 };
+
+export const PHASE_LABELS: Record<import('../core/models/models').CasePhase, string> = {
+  POSTULATORIA: 'Postulatória',
+  INSTRUTORIA: 'Instrução',
+  DECISORIA: 'Sentença/decisão',
+  RECURSAL: 'Recursal',
+  CUMPRIMENTO: 'Cumprimento de sentença',
+  EXECUCAO: 'Execução',
+  ENCERRAMENTO: 'Encerramento',
+};
+
+export const INSTANCES = ['1ª instância', '2ª instância', 'Juizado Especial', 'Turma Recursal', 'Tribunal Superior (STJ/TST/TSE/STM)', 'STF'];
 
 export const UF = [
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI',

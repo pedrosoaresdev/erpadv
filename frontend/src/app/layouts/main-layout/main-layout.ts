@@ -16,7 +16,7 @@ import { PushService } from '../../core/services/push.service';
 import { ThemeService } from '../../core/services/theme.service';
 import { RelativeTimePipe } from '../../shared/pipes/format.pipes';
 import { GlobalSearchComponent } from './global-search';
-import { NAV_SECTIONS, NavItem } from './nav-items';
+import { MOBILE_SHORTCUTS, NAV_SECTIONS, NavItem } from './nav-items';
 
 const COLLAPSE_KEY = 'erpadv.sidebar.collapsed';
 
@@ -45,10 +45,18 @@ export class MainLayoutComponent {
   readonly year = new Date().getFullYear();
 
   readonly sections = computed(() =>
-    NAV_SECTIONS.map((s) => ({ ...s, items: s.items.filter((i) => this.auth.has(i.permission)) })).filter(
+    NAV_SECTIONS.map((s) => ({ ...s, items: s.items.filter((i) => this.allowed(i)) })).filter(
       (s) => s.items.length > 0,
     ),
   );
+
+  /** Barra inferior do celular: 4 atalhos permitidos + botão "Menu" (abre a navegação completa). */
+  readonly shortcuts = computed(() => MOBILE_SHORTCUTS.filter((i) => this.allowed(i)).slice(0, 4));
+
+  private allowed(item: NavItem): boolean {
+    // Itens sem permissão específica exigem pertencer a um escritório (ex.: notificações).
+    return item.permission ? this.auth.has(item.permission) : !!this.auth.me()?.officeId;
+  }
 
   constructor() {
     effect(() => {
@@ -76,8 +84,12 @@ export class MainLayoutComponent {
     }
   }
 
-  stageTooltip(item: NavItem): string {
-    return `${item.label} — disponível na Etapa ${item.stage} do roadmap`;
+  skipToContent(): void {
+    document.getElementById('conteudo')?.focus();
+  }
+
+  phaseTooltip(item: NavItem): string {
+    return `${item.label} — previsto para a Fase ${item.phase} do roadmap`;
   }
 
   openNotification(n: AppNotification): void {

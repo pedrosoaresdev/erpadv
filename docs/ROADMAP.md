@@ -23,6 +23,26 @@ Legenda: ✅ concluída · 🟡 parcial · ⏳ pendente
 | 16 | Docker, Nginx (HTTPS), Compose com Emulator Suite | ✅ |
 | 17 | Testes e segurança (ampliação contínua a cada etapa) | 🟡 |
 
+## Plano de evolução — especificação completa (6 fases)
+
+A especificação "ERPAdv — sistema de gestão jurídica completo" é implantada em fases, sem quebrar o que já existe.
+Banco de dados: a especificação original define o Firebase/Firestore como persistência principal e proíbe SGBDs
+relacionais; essa decisão foi mantida (multi-tenant por `officeId`, backup por export do Firestore) para preservar
+os dados já cadastrados.
+
+| Fase | Escopo | Status |
+|---|---|---|
+| 1 — Fundação | Menu final (seção 23) com fases indicadas, navegação mobile (barra inferior, formulários em tela cheia, tabelas em cartões), dashboard executivo ampliado (prazos 3/7/15 dias, suspensos, aguardando movimentação, agenda, tribunal, origem, desempenho da equipe, comparação com período anterior, filtro por advogado, exportação PDF/Excel, atalhos), clientes PF/PJ completos (nacionalidade, inscrições, representante, contatos, origem, duplicidade, exclusão com política de guarda, sem movimentação recente, ficha PDF/Excel, impressão, histórico, exportação, seleção múltipla/ações em lote/colunas), processos avançados (instância, juízo, polos, assuntos secundários, justiça gratuita, fase, OAB, histórico de responsáveis, movimentações importantes, sentença/recurso/suspensão/trânsito, 12 abas, duplicar, excluir arquivado sem vínculos, relatório PDF/Excel, exportação), pesquisa global em todos os módulos, central de notificações | ✅ |
+| 2 — Operação jurídica | Prazos (datas de disponibilização/publicação/ciência, comprovante), audiências e tarefas como módulos próprios, central documental (pastas, lixeira, visualizador PDF avançado), editor jurídico | ⏳ (prazos, agenda, quadros e documentos básicos já existem) |
+| 3 — Gestão empresarial | Honorários (sucumbência, comissões), centros de custo, contas bancárias, cobranças, central de relatórios, etapas do CRM da especificação | ⏳ (financeiro, contratos e CRM já existem) |
+| 4 — Integrações | Central Judicial (DataJud/PJe e demais, somente por interfaces oficiais), DJEN, WhatsApp Business, e-mail, Google Calendar, assinatura eletrônica | ⏳ |
+| 5 — Inteligência e segurança | IA jurídica com fontes verificáveis, automações, OCR, auditoria com antes/depois, 2FA, controle de dispositivos, LGPD (titulares, consentimentos, incidentes) | ⏳ |
+| 6 — Comercialização | Planos e assinatura, licenças, configurações do escritório (logotipo, cabeçalho de documentos), unidades/filiais, monitoramento | 🟡 (multi-tenant, painel master, planos e limite de usuários já existem) |
+
+Pendências conhecidas da Fase 1: filtro do dashboard por **unidade do escritório** depende do cadastro de unidades
+(Fase 6); foto do cliente e pastas de documentos pessoais entram com a central documental (Fase 2); tarefas
+vinculadas ao cliente usam os quadros Kanban até o módulo de Tarefas (Fase 2).
+
 ## O que falta (registrado ao fim desta entrega)
 
 * Quadros: anexos diretos no cartão (hoje o vínculo é com cliente/processo, cujos documentos ficam no repositório), lembretes automáticos de vencimento dos cartões e quadros-modelo criados pelo próprio escritório.

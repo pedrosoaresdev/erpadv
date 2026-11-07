@@ -193,7 +193,16 @@ public class CrmService {
         if (lead.getStage() == LeadStage.PERDIDO) {
             throw new BusinessException("LEAD_LOST", "Reabra a oportunidade antes de convertê-la.");
         }
-        ClientResponse client = clientService.create(user, clientRequest);
+        ClientRequest r = clientRequest;
+        if ((r.source() == null || r.source().isBlank()) && lead.getSource() != null) {
+            // O cliente herda a origem da oportunidade (indicadores "origem dos novos clientes").
+            r = new ClientRequest(r.type(), r.name(), r.tradeName(), r.document(), r.rg(), r.birthDate(), r.phone(), r.whatsapp(),
+                    r.email(), r.address(), r.profession(), r.maritalStatus(), r.notes(),
+                    r.responsibleUid() == null ? lead.getOwnerUid() : r.responsibleUid(), r.nationality(), r.stateRegistration(),
+                    r.municipalRegistration(), r.legalRepresentative(), r.legalRepresentativeRole(), r.contacts(),
+                    lead.getSource().name(), r.sourceDetail() == null ? lead.getSourceDetail() : r.sourceDetail());
+        }
+        ClientResponse client = clientService.create(user, r);
         Instant now = Instant.now();
         LeadStage previous = lead.getStage();
         lead.setConvertedClientId(client.id());

@@ -10,6 +10,7 @@ import br.com.erpadv.exceptions.BusinessException;
 import br.com.erpadv.exceptions.ConflictException;
 import br.com.erpadv.exceptions.NotFoundException;
 import br.com.erpadv.firebase.CryptoService;
+import br.com.erpadv.firebase.Futures;
 import br.com.erpadv.firebase.SearchTokens;
 import br.com.erpadv.models.Client;
 import br.com.erpadv.models.ClientInteraction;
@@ -42,12 +43,17 @@ public class ClientService {
     private final UserRepository users;
     private final CryptoService crypto;
     private final AuditService audit;
+    private final com.google.cloud.firestore.Firestore db;
+    private final br.com.erpadv.repositories.OfficeRepository offices;
 
-    public ClientService(ClientRepository clients, UserRepository users, CryptoService crypto, AuditService audit) {
+    public ClientService(ClientRepository clients, UserRepository users, CryptoService crypto, AuditService audit,
+                         com.google.cloud.firestore.Firestore db, br.com.erpadv.repositories.OfficeRepository offices) {
         this.clients = clients;
         this.users = users;
         this.crypto = crypto;
         this.audit = audit;
+        this.db = db;
+        this.offices = offices;
     }
 
     public CursorPage<ClientSummary> list(AuthenticatedUser user, String search, ClientStatus status, ClientType type,
@@ -102,6 +108,7 @@ public class ClientService {
         apply(client, req, docDigits, hash);
         client.setStatus(ClientStatus.ACTIVE);
         Instant now = Instant.now();
+        client.setLastActivityAt(now);
         client.setCreatedAt(now);
         client.setUpdatedAt(now);
         client.setCreatedBy(user.uid());
@@ -195,6 +202,11 @@ public class ClientService {
         interaction.setCreatedAt(Instant.now());
         interaction.setCreatedBy(user.uid());
         clients.saveInteraction(user.officeId(), interaction);
+        Client owner = load(user, clientId);
+        if (owner.getLastActivityAt() == null || owner.getLastActivityAt().isBefore(req.occurredAt())) {
+            owner.setLastActivityAt(req.occurredAt());
+            clients.save(user.officeId(), owner);
+        }
         audit.record(user, "CLIENT_INTERACTION_ADDED", "client", clientId, "Atendimento registrado: " + interaction.getSubject());
         return interaction;
     }
@@ -202,6 +214,201 @@ public class ClientService {
     public CursorPage<ClientInteraction> interactions(AuthenticatedUser user, String clientId, String cursor, int size) {
         load(user, clientId);
         return clients.interactions(user.officeId(), clientId, cursor, size);
+    }
+
+    // ------------------------------------------------------------------ exclusão, duplicidade, fichas e exportação
+
+    /** Coleções com vínculo ao cliente: a exclusão só é permitida quando todas estão vazias. */
+    static final Map<String, String> LINKS = new java.util.LinkedHashMap<>(Map.of(
+            "cases", "processo(s)", "contracts", "contrato(s)", "financial_transactions", "lançamento(s) financeiro(s)",
+            "documents", "documento(s)", "deadlines", "prazo(s)", "appointments", "compromisso(s)"));
+
+    public Map<String, Long> links(AuthenticatedUser user, String id) {
+        load(user, id);
+        var officeRef = db.collection("offices").document(user.officeId());
+        Map<String, com.google.api.core.ApiFuture<com.google.cloud.firestore.AggregateQuerySnapshot>> futures = new java.util.LinkedHashMap<>();
+        LINKS.keySet().forEach(col -> futures.put(col, officeRef.collection(col).whereEqualTo("clientId", id).count().get()));
+        Map<String, Long> counts = new java.util.LinkedHashMap<>();
+        futures.forEach((k, f) -> counts.put(k, Futures.await(f).getCount()));
+        return counts;
+    }
+
+    /**
+     * Exclusão definitiva, permitida apenas para cadastros sem processos, contratos, financeiro, documentos,
+     * prazos ou compromissos (obrigações de guarda). Nos demais casos, o cadastro deve ser arquivado (inativado).
+     */
+    public void delete(AuthenticatedUser user, String id, String reason) {
+        Client client = load(user, id);
+        Map<String, Long> counts = links(user, id);
+        List<String> blocking = counts.entrySet().stream().filter(e -> e.getValue() > 0)
+                .map(e -> e.getValue() + " " + LINKS.get(e.getKey())).toList();
+        if (!blocking.isEmpty()) {
+            throw new ConflictException("CLIENT_HAS_LINKS", "Cliente com " + String.join(", ", blocking)
+                    + ". Arquive (inative) o cadastro em vez de excluir.");
+        }
+        var interactionsRef = clients.collection(user.officeId()).document(id).collection("interactions");
+        for (var doc : Futures.await(interactionsRef.limit(500).get()).getDocuments()) {
+            Futures.await(doc.getReference().delete());
+        }
+        Futures.await(clients.collection(user.officeId()).document(id).delete());
+        audit.record(user, "CLIENT_DELETED", "client", id, "Cliente excluído: " + client.getName(),
+                Map.of("reason", reason == null ? "" : reason, "document", client.getDocumentMasked() == null ? "" : client.getDocumentMasked()));
+    }
+
+    /** Possíveis duplicidades por CPF/CNPJ, telefone, e-mail ou nome idêntico. */
+    public List<br.com.erpadv.dto.ClientDtos.DuplicateMatch> duplicates(AuthenticatedUser user, String name, String document,
+                                                                         String phone, String email, String excludeId) {
+        String officeId = user.requireOffice();
+        Map<String, br.com.erpadv.dto.ClientDtos.DuplicateMatch> found = new java.util.LinkedHashMap<>();
+        java.util.function.BiConsumer<String, String> check = (token, reason) -> {
+            if (token == null) {
+                return;
+            }
+            for (Client c : clients.list(clients.collection(officeId).whereArrayContains("searchTokens", token), 5)) {
+                if (!c.getId().equals(excludeId)) {
+                    found.putIfAbsent(c.getId(), new br.com.erpadv.dto.ClientDtos.DuplicateMatch(toSummary(c), reason));
+                }
+            }
+        };
+        String digits = BrazilianDocuments.digits(document);
+        if ((digits.length() == 11 || digits.length() == 14) && BrazilianDocuments.isValidCpfOrCnpj(digits)) {
+            check.accept("d:" + crypto.hmac(digits), "Mesmo CPF/CNPJ");
+        }
+        String phoneDigits = BrazilianDocuments.digits(phone);
+        if (phoneDigits.length() >= 8) {
+            check.accept("p:" + phoneDigits.substring(Math.max(0, phoneDigits.length() - 11)), "Mesmo telefone");
+        }
+        if (email != null && email.contains("@")) {
+            check.accept("e:" + email.trim().toLowerCase(Locale.ROOT), "Mesmo e-mail");
+        }
+        if (name != null && name.trim().length() >= 5) {
+            String normalized = SearchTokens.normalize(name);
+            for (Client c : clients.list(clients.collection(officeId).whereEqualTo("nameLower", normalized), 5)) {
+                if (!c.getId().equals(excludeId)) {
+                    found.putIfAbsent(c.getId(), new br.com.erpadv.dto.ClientDtos.DuplicateMatch(toSummary(c), "Mesmo nome"));
+                }
+            }
+        }
+        return new ArrayList<>(found.values());
+    }
+
+    /** Clientes ativos sem atendimento ou movimentação há {@code days} dias ou mais. */
+    public List<ClientSummary> stale(AuthenticatedUser user, int days) {
+        String officeId = user.requireOffice();
+        long cutoff = Instant.now().minus(Math.max(1, days), java.time.temporal.ChronoUnit.DAYS).toEpochMilli();
+        return Futures.await(clients.collection(officeId).whereEqualTo("status", ClientStatus.ACTIVE.name()).limit(5000).get())
+                .getDocuments().stream()
+                .filter(d -> {
+                    Long last = d.getLong("lastActivityAt");
+                    Long created = d.getLong("createdAt");
+                    return (last != null ? last : created != null ? created : Long.MAX_VALUE) < cutoff;
+                })
+                .map(d -> clients.findById(officeId, d.getId()).orElse(null))
+                .filter(Objects::nonNull)
+                .sorted(java.util.Comparator.comparing(c -> c.getNameLower() == null ? "" : c.getNameLower()))
+                .limit(500)
+                .map(this::toSummary)
+                .toList();
+    }
+
+    /** Ficha cadastral (PDF ou Excel). CPF/CNPJ completo apenas para quem tem acesso a dados sensíveis. */
+    public br.com.erpadv.services.generation.ReportExporter.Exported sheet(AuthenticatedUser user, String id, String format,
+                                                                         List<List<String>> cases) {
+        Client c = load(user, id);
+        boolean sensitive = user.has(Permission.CLIENTS_SENSITIVE_READ);
+        ClientResponse r = toResponse(c, sensitive);
+        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        List<List<String>> fields = new ArrayList<>();
+        java.util.function.BiConsumer<String, String> add = (k, v) -> {
+            if (v != null && !v.isBlank()) {
+                fields.add(List.of(k, v));
+            }
+        };
+        boolean pj = c.getType() == ClientType.PJ;
+        add.accept(pj ? "Razão social" : "Nome completo", c.getName());
+        add.accept("Nome fantasia", c.getTradeName());
+        add.accept(pj ? "CNPJ" : "CPF", r.document());
+        add.accept("RG", sensitive ? r.rg() : null);
+        add.accept("Data de nascimento", c.getBirthDate() == null ? null : c.getBirthDate().format(fmt));
+        add.accept("Nacionalidade", c.getNationality());
+        add.accept("Estado civil", c.getMaritalStatus());
+        add.accept("Profissão", c.getProfession());
+        add.accept("Inscrição estadual", c.getStateRegistration());
+        add.accept("Inscrição municipal", c.getMunicipalRegistration());
+        add.accept("Representante legal", c.getLegalRepresentative() == null ? null
+                : c.getLegalRepresentative() + (c.getLegalRepresentativeRole() == null ? "" : " (" + c.getLegalRepresentativeRole() + ")"));
+        add.accept("Telefone", c.getPhone());
+        add.accept("WhatsApp", c.getWhatsapp());
+        add.accept("E-mail", c.getEmail());
+        if (c.getAddress() != null) {
+            var a = c.getAddress();
+            String line = java.util.stream.Stream.of(a.getStreet(), a.getNumber(), a.getComplement(), a.getNeighborhood(), a.getCity(),
+                    a.getState(), a.getZipCode()).filter(x -> x != null && !x.isBlank()).collect(java.util.stream.Collectors.joining(", "));
+            add.accept("Endereço", line);
+        }
+        add.accept("Situação", c.getStatus() == ClientStatus.ACTIVE ? "Ativo" : "Inativo"
+                + (c.getInactivationReason() == null ? "" : " — " + c.getInactivationReason()));
+        add.accept("Inadimplente", c.isDefaulting() ? "Sim" : "Não");
+        add.accept("Origem", c.getSource() == null ? null : DashboardService.sourceLabel(c.getSource())
+                + (c.getSourceDetail() == null ? "" : " — " + c.getSourceDetail()));
+        add.accept("Cadastrado em", c.getCreatedAt() == null ? null : c.getCreatedAt().atZone(java.time.ZoneId.of("America/Sao_Paulo")).format(fmt));
+        add.accept("Observações", c.getNotes());
+        List<br.com.erpadv.services.generation.ReportExporter.Section> sections = new ArrayList<>();
+        sections.add(br.com.erpadv.services.generation.ReportExporter.Section.fields("Dados cadastrais", fields));
+        if (!c.getContacts().isEmpty()) {
+            sections.add(br.com.erpadv.services.generation.ReportExporter.Section.table("Contatos", List.of("Nome", "Função", "Telefone", "E-mail"),
+                    c.getContacts().stream().map(x -> List.of(nz(x.getName()), nz(x.getRole()), nz(x.getPhone()), nz(x.getEmail()))).toList()));
+        }
+        if (cases != null) {
+            sections.add(br.com.erpadv.services.generation.ReportExporter.Section.table("Processos vinculados",
+                    List.of("Número CNJ", "Área", "Juízo", "Situação"), cases));
+        }
+        String officeName = offices.findById(user.officeId()).map(br.com.erpadv.models.Office::getName).orElse("Escritório");
+        audit.record(user, "CLIENT_SHEET_EXPORTED", "client", id, "Ficha cadastral gerada: " + c.getName(),
+                Map.of("format", format == null ? "pdf" : format, "sensitive", String.valueOf(sensitive)));
+        return br.com.erpadv.services.generation.ReportExporter.export(
+                new br.com.erpadv.services.generation.ReportExporter.Report("Ficha cadastral do cliente", officeName,
+                        c.getName(), sections, false), format, "ficha-cliente-" + SearchTokens.normalize(c.getName()).replace(' ', '-'));
+    }
+
+    /** Exporta a lista (filtros atuais ou seleção) — dados mascarados; uso registrado na auditoria. */
+    public br.com.erpadv.services.generation.ReportExporter.Exported export(AuthenticatedUser user, String search, ClientStatus status,
+                                                                          ClientType type, Boolean defaulting, List<String> ids,
+                                                                          String format) {
+        String officeId = user.requireOffice();
+        List<ClientSummary> rows = new ArrayList<>();
+        if (ids != null && !ids.isEmpty()) {
+            ids.stream().limit(1000).forEach(i -> clients.findById(officeId, i).map(this::toSummary).ifPresent(rows::add));
+        } else {
+            String cursor = null;
+            do {
+                CursorPage<ClientSummary> page = list(user, search, status, type, defaulting, cursor, 100);
+                rows.addAll(page.items());
+                cursor = page.nextCursor();
+            } while (cursor != null && rows.size() < 5000);
+        }
+        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        List<List<String>> table = rows.stream().map(c -> List.of(nz(c.name()), c.type() == ClientType.PJ ? "PJ" : "PF",
+                nz(c.documentMasked()), nz(c.phone()), nz(c.email()), c.status() == ClientStatus.ACTIVE ? "Ativo" : "Inativo",
+                c.defaulting() ? "Sim" : "Não",
+                c.createdAt() == null ? "" : c.createdAt().atZone(java.time.ZoneId.of("America/Sao_Paulo")).format(fmt))).toList();
+        String officeName = offices.findById(officeId).map(br.com.erpadv.models.Office::getName).orElse("Escritório");
+        audit.record(user, "CLIENTS_EXPORTED", "client", "*", "Exportação de clientes (" + rows.size() + ")",
+                Map.of("format", format == null ? "pdf" : format, "selection", String.valueOf(ids != null && !ids.isEmpty())));
+        String filters = java.util.stream.Stream.of(search == null || search.isBlank() ? null : "busca \"" + search + "\"",
+                        status == null ? null : (status == ClientStatus.ACTIVE ? "ativos" : "inativos"),
+                        type == null ? null : type.name(), Boolean.TRUE.equals(defaulting) ? "inadimplentes" : null,
+                        ids != null && !ids.isEmpty() ? "seleção manual" : null)
+                .filter(Objects::nonNull).collect(java.util.stream.Collectors.joining(", "));
+        return br.com.erpadv.services.generation.ReportExporter.export(new br.com.erpadv.services.generation.ReportExporter.Report(
+                "Clientes cadastrados", officeName, rows.size() + " cliente(s)" + (filters.isEmpty() ? "" : " · Filtros: " + filters),
+                List.of(br.com.erpadv.services.generation.ReportExporter.Section.table("Clientes",
+                        List.of("Nome", "Tipo", "CPF/CNPJ", "Telefone", "E-mail", "Situação", "Inadimplente", "Cadastro"), table)), true),
+                format, "clientes");
+    }
+
+    private static String nz(String v) {
+        return v == null ? "" : v;
     }
 
     // ------------------------------------------------------------------ helpers
@@ -259,6 +466,26 @@ public class ClientService {
         client.setMaritalStatus(trim(req.maritalStatus()));
         client.setNotes(trim(req.notes()));
         client.setResponsibleUid(trim(req.responsibleUid()));
+        client.setNationality(trim(req.nationality()));
+        boolean pj = req.type() == ClientType.PJ;
+        client.setStateRegistration(pj ? trim(req.stateRegistration()) : null);
+        client.setMunicipalRegistration(pj ? trim(req.municipalRegistration()) : null);
+        client.setLegalRepresentative(pj ? trim(req.legalRepresentative()) : null);
+        client.setLegalRepresentativeRole(pj ? trim(req.legalRepresentativeRole()) : null);
+        List<br.com.erpadv.models.ClientContact> contacts = new ArrayList<>();
+        if (req.contacts() != null) {
+            for (var c : req.contacts()) {
+                var contact = new br.com.erpadv.models.ClientContact();
+                contact.setName(c.name().trim());
+                contact.setRole(trim(c.role()));
+                contact.setPhone(trim(c.phone()));
+                contact.setEmail(c.email() == null || c.email().isBlank() ? null : c.email().trim().toLowerCase(Locale.ROOT));
+                contacts.add(contact);
+            }
+        }
+        client.setContacts(contacts);
+        client.setSource(trim(req.source()));
+        client.setSourceDetail(trim(req.sourceDetail()));
         client.setSearchTokens(buildTokens(client, docDigits, hash));
     }
 
@@ -290,6 +517,10 @@ public class ClientService {
         if (!Objects.equals(c.getMaritalStatus(), trim(r.maritalStatus()))) changed.add("maritalStatus");
         if (!Objects.equals(c.getNotes(), trim(r.notes()))) changed.add("notes");
         if (!Objects.equals(c.getResponsibleUid(), trim(r.responsibleUid()))) changed.add("responsibleUid");
+        if (!Objects.equals(c.getNationality(), trim(r.nationality()))) changed.add("nationality");
+        if (!Objects.equals(c.getLegalRepresentative(), trim(r.legalRepresentative()))) changed.add("legalRepresentative");
+        if (!Objects.equals(c.getSource(), trim(r.source()))) changed.add("source");
+        if (r.contacts() != null && r.contacts().size() != c.getContacts().size()) changed.add("contacts");
         return changed;
     }
 
@@ -310,7 +541,9 @@ public class ClientService {
                 c.getDocumentMasked(), rg, sensitive, c.getBirthDate(), c.getPhone(), c.getWhatsapp(), c.getEmail(),
                 c.getAddress(), c.getProfession(), c.getMaritalStatus(), c.getNotes(), c.getStatus(), c.isDefaulting(),
                 c.getResponsibleUid(), c.getInactivatedAt(), c.getInactivationReason(), c.getCreatedAt(),
-                c.getUpdatedAt());
+                c.getUpdatedAt(), c.getNationality(), c.getStateRegistration(), c.getMunicipalRegistration(),
+                c.getLegalRepresentative(), c.getLegalRepresentativeRole(), c.getContacts(), c.getSource(),
+                c.getSourceDetail(), c.getLastActivityAt());
     }
 
     private static String trim(String value) {

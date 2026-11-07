@@ -7,7 +7,10 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
-import { Client, ClientInteraction, LegalCase } from '../../core/models/models';
+import { AuditLog, Client, ClientInteraction, LegalCase } from '../../core/models/models';
+import { SOURCE_LABELS } from '../crm/crm.service';
+import { saveBlob } from '../finance/finance.service';
+import { RelativeTimePipe } from '../../shared/pipes/format.pipes';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmData, ConfirmDialogComponent } from '../../shared/components/confirm-dialog';
 import { EmptyStateComponent, LoadingComponent } from '../../shared/components/ui';
@@ -25,7 +28,7 @@ import { DocumentsTableComponent } from '../documents/documents-table';
   selector: 'app-client-detail',
   imports: [
     RouterLink, MatButtonModule, MatIconModule, MatTabsModule, MatMenuModule, MatTooltipModule, LoadingComponent,
-    EmptyStateComponent, BrDatePipe, CentsPipe, TransactionsTableComponent, DocumentsTableComponent,
+    EmptyStateComponent, BrDatePipe, CentsPipe, RelativeTimePipe, TransactionsTableComponent, DocumentsTableComponent,
   ],
   template: `
     <div class="page">
@@ -46,11 +49,17 @@ import { DocumentsTableComponent } from '../documents/documents-table';
             </div>
           </div>
           <div class="hero-actions">
+            <button mat-stroked-button [matMenuTriggerFor]="printMenu"><mat-icon>print</mat-icon>Ficha</button>
+            <mat-menu #printMenu="matMenu">
+              <button mat-menu-item (click)="printSheet()"><mat-icon>print</mat-icon>Imprimir ficha cadastral</button>
+              <button mat-menu-item (click)="downloadSheet('pdf')"><mat-icon>picture_as_pdf</mat-icon>Baixar PDF</button>
+              <button mat-menu-item (click)="downloadSheet('xlsx')"><mat-icon>table_view</mat-icon>Baixar Excel</button>
+            </mat-menu>
             @if (auth.has('CLIENTS_WRITE')) {
               <button mat-stroked-button (click)="edit()"><mat-icon>edit</mat-icon>Editar</button>
               <button mat-flat-button (click)="addInteraction()"><mat-icon>support_agent</mat-icon>Atendimento</button>
             }
-            @if (auth.has('CLIENTS_WRITE') || auth.has('CLIENTS_INACTIVATE')) {
+            @if (auth.has('CLIENTS_WRITE') || auth.has('CLIENTS_INACTIVATE') || auth.has('CLIENTS_DELETE')) {
               <button mat-icon-button [matMenuTriggerFor]="more" aria-label="Mais ações"><mat-icon>more_vert</mat-icon></button>
               <mat-menu #more="matMenu">
                 @if (auth.has('CASES_WRITE')) {
@@ -67,6 +76,9 @@ import { DocumentsTableComponent } from '../documents/documents-table';
                   } @else {
                     <button mat-menu-item (click)="reactivate()"><mat-icon>person</mat-icon>Reativar cliente</button>
                   }
+                }
+                @if (auth.has('CLIENTS_DELETE')) {
+                  <button mat-menu-item class="danger" (click)="remove()"><mat-icon>delete_forever</mat-icon>Excluir cadastro</button>
                 }
               </mat-menu>
             }
@@ -92,7 +104,15 @@ import { DocumentsTableComponent } from '../documents/documents-table';
                     <dt>Nascimento</dt><dd>{{ c.birthDate | brDate }}</dd>
                     <dt>Estado civil</dt><dd>{{ c.maritalStatus || '—' }}</dd>
                     <dt>Profissão</dt><dd>{{ c.profession || '—' }}</dd>
+                    <dt>Nacionalidade</dt><dd>{{ c.nationality || '—' }}</dd>
                   }
+                  @if (c.type === 'PJ') {
+                    <dt>Inscr. estadual</dt><dd>{{ c.stateRegistration || '—' }}</dd>
+                    <dt>Inscr. municipal</dt><dd>{{ c.municipalRegistration || '—' }}</dd>
+                    <dt>Representante</dt><dd>{{ c.legalRepresentative || '—' }}{{ c.legalRepresentativeRole ? ' (' + c.legalRepresentativeRole + ')' : '' }}</dd>
+                  }
+                  <dt>Origem</dt><dd>{{ c.source ? (sources[c.source] || c.source) : 'Não informada' }}{{ c.sourceDetail ? ' — ' + c.sourceDetail : '' }}</dd>
+                  <dt>Última atividade</dt><dd>{{ c.lastActivityAt ? (c.lastActivityAt | relative) : '—' }}</dd>
                 </dl>
               </section>
               <section class="card card-pad">
@@ -105,6 +125,14 @@ import { DocumentsTableComponent } from '../documents/documents-table';
                   </dd>
                   <dt>E-mail</dt><dd>@if (c.email) { <a [href]="'mailto:' + c.email">{{ c.email }}</a> } @else { — }</dd>
                 </dl>
+                @if (c.contacts?.length) {
+                  <div class="contacts">
+                    @for (p of c.contacts; track $index) {
+                      <div class="contact"><strong>{{ p.name }}</strong>@if (p.role) { <span class="muted"> · {{ p.role }}</span> }
+                        <div class="muted small">{{ p.phone || '' }} {{ p.email || '' }}</div></div>
+                    }
+                  </div>
+                }
               </section>
               <section class="card card-pad">
                 <div class="card-title"><mat-icon>home_work</mat-icon>Endereço</div>
@@ -184,6 +212,28 @@ import { DocumentsTableComponent } from '../documents/documents-table';
               <div class="tab-card"><app-documents-table [clientId]="c.id" [client]="{ id: c.id, name: c.name }" [compact]="true" /></div>
             </mat-tab>
           }
+
+          <mat-tab label="Histórico">
+            <ng-template matTabContent>
+              <div class="card tab-card">
+                @if (history().length === 0) {
+                  <app-empty-state icon="history" title="Sem registros" />
+                } @else {
+                  <ul class="timeline">
+                    @for (h of history(); track h.id) {
+                      <li>
+                        <span class="dot"></span>
+                        <div class="t-head"><strong>{{ h.summary }}</strong></div>
+                        @if (h.details['fields']) { <div class="muted small">Campos alterados: {{ h.details['fields'] }}</div> }
+                        <div class="muted small">{{ h.at | brDate: true }} · {{ h.actorEmail || h.actorUid }}</div>
+                      </li>
+                    }
+                  </ul>
+                  @if (historyCursor()) { <div class="more"><button mat-stroked-button (click)="loadHistory(true)">Carregar mais</button></div> }
+                }
+              </div>
+            </ng-template>
+          </mat-tab>
         </mat-tab-group>
       }
     </div>
@@ -214,6 +264,9 @@ import { DocumentsTableComponent } from '../documents/documents-table';
     .timeline li { position: relative; padding: 0 0 22px; }
     .dot { position: absolute; left: -21px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--app-gold); border: 2px solid var(--app-surface); }
     .t-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .contacts { margin-top: 12px; border-top: 1px solid var(--app-border); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .danger { color: var(--app-danger); }
+    .hero-actions { flex-wrap: wrap; }
   `,
 })
 export class ClientDetailComponent {
@@ -231,6 +284,9 @@ export class ClientDetailComponent {
   readonly casesCursor = signal<string | null>(null);
   readonly interactions = signal<ClientInteraction[]>([]);
   readonly interactionsCursor = signal<string | null>(null);
+  readonly history = signal<AuditLog[]>([]);
+  readonly historyCursor = signal<string | null>(null);
+  readonly sources = SOURCE_LABELS as Record<string, string>;
 
   constructor() {
     effect(() => {
@@ -240,6 +296,7 @@ export class ClientDetailComponent {
         next: (c) => {
           this.client.set(c);
           this.loadInteractions(false);
+          this.loadHistory(false);
           if (this.auth.has('CASES_READ')) this.loadCases(false);
         },
         error: () => void this.router.navigate(['/clientes']),
@@ -258,6 +315,69 @@ export class ClientDetailComponent {
     this.service.interactions(this.id(), more ? this.interactionsCursor() : null).subscribe((page) => {
       this.interactions.set(more ? [...this.interactions(), ...page.items] : page.items);
       this.interactionsCursor.set(page.nextCursor);
+    });
+  }
+
+  loadHistory(more: boolean): void {
+    this.service.history(this.id(), more ? this.historyCursor() : null).subscribe((page) => {
+      this.history.set(more ? [...this.history(), ...page.items] : page.items);
+      this.historyCursor.set(page.nextCursor);
+    });
+  }
+
+  downloadSheet(format: 'pdf' | 'xlsx'): void {
+    this.service.sheet(this.id(), format).subscribe({
+      next: (r) => saveBlob(r, `ficha-cliente.${format}`),
+      error: () => this.toast.error('Não foi possível gerar a ficha.'),
+    });
+  }
+
+  /** Abre a ficha em PDF numa nova aba, com o diálogo de impressão do navegador. */
+  printSheet(): void {
+    const win = window.open('', '_blank');
+    this.service.sheet(this.id(), 'pdf').subscribe({
+      next: (r) => {
+        const url = URL.createObjectURL(r.body as Blob);
+        if (win) {
+          win.location.href = url;
+          win.addEventListener('load', () => win.print(), { once: true });
+        } else {
+          saveBlob(r, 'ficha-cliente.pdf');
+        }
+        setTimeout(() => URL.revokeObjectURL(url), 120_000);
+      },
+      error: () => { win?.close(); this.toast.error('Não foi possível gerar a ficha.'); },
+    });
+  }
+
+  /** Exclusão definitiva só sem vínculos; com vínculos, orienta a arquivar. */
+  remove(): void {
+    const c = this.client();
+    if (!c) return;
+    this.service.links(c.id).subscribe((links) => {
+      const labels: Record<string, string> = { cases: 'processo(s)', contracts: 'contrato(s)', financial_transactions: 'lançamento(s)',
+        documents: 'documento(s)', deadlines: 'prazo(s)', appointments: 'compromisso(s)' };
+      const blocking = Object.entries(links).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${labels[k] ?? k}`);
+      if (blocking.length) {
+        this.dialog.open(ConfirmDialogComponent, {
+          data: { title: 'Exclusão não permitida', message: `${c.name} possui ${blocking.join(', ')}. Por obrigação de guarda, arquive (inative) o cadastro em vez de excluir.`,
+            confirmLabel: c.status === 'ACTIVE' && this.auth.has('CLIENTS_INACTIVATE') ? 'Arquivar' : 'Entendi' },
+          width: '480px',
+        }).afterClosed().subscribe((ok) => { if (ok && c.status === 'ACTIVE' && this.auth.has('CLIENTS_INACTIVATE')) this.inactivate(); });
+        return;
+      }
+      this.dialog.open(ConfirmDialogComponent, {
+        data: { title: 'Excluir cliente', message: `O cadastro de ${c.name} e seus atendimentos serão excluídos definitivamente. A exclusão fica registrada na auditoria.`,
+          confirmLabel: 'Excluir', danger: true, reasonLabel: 'Motivo da exclusão', reasonRequired: true },
+        width: '480px',
+      }).afterClosed().subscribe((reason?: string) => {
+        if (typeof reason === 'string' && reason) {
+          this.service.delete(c.id, reason).subscribe(() => {
+            this.toast.success('Cliente excluído.');
+            void this.router.navigate(['/clientes']);
+          });
+        }
+      });
     });
   }
 

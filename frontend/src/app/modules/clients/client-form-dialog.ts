@@ -1,4 +1,11 @@
 import { Component, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { RouterLink } from '@angular/router';
+import { FormArray, FormControl, FormGroup } from '@angular/forms';
+import { catchError, of } from 'rxjs';
+import { ApiService } from '../../core/api/api.service';
+import { DuplicateMatch, EmployeeOption } from '../../core/models/models';
+import { SOURCE_LABELS } from '../crm/crm.service';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -19,7 +26,7 @@ const MARITAL = ['Solteiro(a)', 'Casado(a)', 'União estável', 'Divorciado(a)',
   selector: 'app-client-form-dialog',
   imports: [
     ReactiveFormsModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule,
-    MatButtonToggleModule, MatIconModule,
+    MatButtonToggleModule, MatIconModule, RouterLink,
   ],
   template: `
     <h2 mat-dialog-title class="dialog-title"><mat-icon>{{ data ? 'edit' : 'person_add' }}</mat-icon>{{ data ? 'Editar cliente' : 'Novo cliente' }}</h2>
@@ -32,23 +39,51 @@ const MARITAL = ['Solteiro(a)', 'Casado(a)', 'União estável', 'Divorciado(a)',
           </mat-button-toggle-group>
         </div>
 
+        @if (duplicates().length) {
+          <div class="dup" role="alert">
+            <mat-icon>content_copy</mat-icon>
+            <div>
+              <strong>Possível cadastro duplicado</strong>
+              @for (d of duplicates(); track d.client.id) {
+                <div><a [routerLink]="['/clientes', d.client.id]" mat-dialog-close>{{ d.client.name }}</a>
+                  <span class="muted"> · {{ d.reason }} · {{ d.client.documentMasked }}</span></div>
+              }
+            </div>
+          </div>
+        }
         <div class="form-section-title">Identificação</div>
         <mat-form-field appearance="outline" class="c8">
           <mat-label>{{ isPj() ? 'Razão social' : 'Nome completo' }}</mat-label>
-          <input matInput formControlName="name" />
+          <input matInput formControlName="name" (blur)="checkDuplicates()" />
           @if (form.controls.name.invalid) { <mat-error>Campo obrigatório</mat-error> }
         </mat-form-field>
         <mat-form-field appearance="outline" class="c4">
           <mat-label>{{ isPj() ? 'CNPJ' : 'CPF' }}</mat-label>
-          <input matInput formControlName="document" (input)="maskDoc($event)" [placeholder]="sensitiveLocked() ? data!.documentMasked : ''" />
+          <input matInput formControlName="document" (input)="maskDoc($event)" (blur)="checkDuplicates()" [placeholder]="sensitiveLocked() ? data!.documentMasked : ''" />
           @if (sensitiveLocked()) { <mat-hint>Protegido — sem permissão para visualizar</mat-hint> }
           @if (form.controls.document.hasError('required')) { <mat-error>Obrigatório</mat-error> }
           @if (form.controls.document.hasError('cpf') || form.controls.document.hasError('cnpj')) { <mat-error>{{ isPj() ? 'CNPJ' : 'CPF' }} inválido</mat-error> }
         </mat-form-field>
         @if (isPj()) {
-          <mat-form-field appearance="outline" class="c8">
+          <mat-form-field appearance="outline" class="c6">
             <mat-label>Nome fantasia</mat-label>
             <input matInput formControlName="tradeName" />
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="c3">
+            <mat-label>Inscrição estadual</mat-label>
+            <input matInput formControlName="stateRegistration" />
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="c3">
+            <mat-label>Inscrição municipal</mat-label>
+            <input matInput formControlName="municipalRegistration" />
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="c8">
+            <mat-label>Representante legal</mat-label>
+            <input matInput formControlName="legalRepresentative" />
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="c4">
+            <mat-label>Cargo do representante</mat-label>
+            <input matInput formControlName="legalRepresentativeRole" placeholder="Ex.: sócio-administrador" />
           </mat-form-field>
         } @else {
           <mat-form-field appearance="outline" class="c4">
@@ -66,16 +101,20 @@ const MARITAL = ['Solteiro(a)', 'Casado(a)', 'União estável', 'Divorciado(a)',
               @for (m of marital; track m) { <mat-option [value]="m">{{ m }}</mat-option> }
             </mat-select>
           </mat-form-field>
-          <mat-form-field appearance="outline" class="c6">
+          <mat-form-field appearance="outline" class="c4">
             <mat-label>Profissão</mat-label>
             <input matInput formControlName="profession" />
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="c4">
+            <mat-label>Nacionalidade</mat-label>
+            <input matInput formControlName="nationality" />
           </mat-form-field>
         }
 
         <div class="form-section-title">Contato</div>
         <mat-form-field appearance="outline" class="c4">
           <mat-label>Telefone</mat-label>
-          <input matInput formControlName="phone" (input)="maskPhone('phone', $event)" />
+          <input matInput formControlName="phone" (input)="maskPhone('phone', $event)" (blur)="checkDuplicates()" />
         </mat-form-field>
         <mat-form-field appearance="outline" class="c4">
           <mat-label>WhatsApp</mat-label>
@@ -83,8 +122,42 @@ const MARITAL = ['Solteiro(a)', 'Casado(a)', 'União estável', 'Divorciado(a)',
         </mat-form-field>
         <mat-form-field appearance="outline" class="c4">
           <mat-label>E-mail</mat-label>
-          <input matInput type="email" formControlName="email" />
+          <input matInput type="email" formControlName="email" (blur)="checkDuplicates()" />
           @if (form.controls.email.invalid) { <mat-error>E-mail inválido</mat-error> }
+        </mat-form-field>
+
+        @if (isPj()) {
+          <div class="form-section-title row">Pessoas de contato <span class="spacer"></span>
+            <button mat-button type="button" (click)="addContact()" [disabled]="contacts.length >= 10"><mat-icon>add</mat-icon>Adicionar</button></div>
+          @for (c of contacts.controls; track c; let i = $index) {
+            <ng-container [formGroup]="c">
+              <mat-form-field appearance="outline" class="c3"><mat-label>Nome</mat-label><input matInput formControlName="name" /></mat-form-field>
+              <mat-form-field appearance="outline" class="c3"><mat-label>Função</mat-label><input matInput formControlName="role" placeholder="Ex.: financeiro" /></mat-form-field>
+              <mat-form-field appearance="outline" class="c2"><mat-label>Telefone</mat-label><input matInput formControlName="phone" /></mat-form-field>
+              <mat-form-field appearance="outline" class="c3"><mat-label>E-mail</mat-label><input matInput formControlName="email" /></mat-form-field>
+              <div class="c1 rm"><button mat-icon-button type="button" (click)="contacts.removeAt(i)" aria-label="Remover contato"><mat-icon>delete</mat-icon></button></div>
+            </ng-container>
+          }
+        }
+
+        <div class="form-section-title">Origem e responsável</div>
+        <mat-form-field appearance="outline" class="c4">
+          <mat-label>Origem do cliente</mat-label>
+          <mat-select formControlName="source">
+            <mat-option value="">Não informada</mat-option>
+            @for (s of sources; track s) { <mat-option [value]="s">{{ sourceLabels[s] }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="c4">
+          <mat-label>Detalhe da origem</mat-label>
+          <input matInput formControlName="sourceDetail" placeholder="Ex.: indicado por cliente X" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="c4">
+          <mat-label>Advogado responsável</mat-label>
+          <mat-select formControlName="responsibleUid">
+            <mat-option value="">—</mat-option>
+            @for (s of staff(); track s.uid) { <mat-option [value]="s.uid">{{ s.displayName }}</mat-option> }
+          </mat-select>
         </mat-form-field>
 
         <div class="form-section-title">Endereço</div>
@@ -138,6 +211,12 @@ const MARITAL = ['Solteiro(a)', 'Casado(a)', 'União estável', 'Divorciado(a)',
   `,
   styles: `
     .type-row { grid-column: span 12; margin: 4px 0 16px; }
+    .dup { grid-column: span 12; display: flex; gap: 10px; padding: 10px 14px; border-radius: 10px; margin-bottom: 8px;
+      background: var(--app-warning-bg); color: var(--app-warning); font-size: 13px; }
+    .dup a { color: inherit; font-weight: 600; }
+    .c1 { grid-column: span 1; }
+    .rm { display: flex; align-items: flex-start; padding-top: 8px; }
+    @media (max-width: 760px) { .form-grid > .c1 { grid-column: span 12; } }
     mat-dialog-content { max-height: 70vh; }
   `,
 })
@@ -149,6 +228,13 @@ export class ClientFormDialogComponent {
   readonly marital = MARITAL;
   readonly today = new Date().toISOString().slice(0, 10);
   readonly saving = signal(false);
+  private readonly api = inject(ApiService);
+  readonly sources = Object.keys(SOURCE_LABELS);
+  readonly sourceLabels = SOURCE_LABELS as Record<string, string>;
+  readonly staff = toSignal(this.api.get<EmployeeOption[]>('/employees/options', undefined, true).pipe(catchError(() => of([]))),
+    { initialValue: [] as EmployeeOption[] });
+  readonly duplicates = signal<DuplicateMatch[]>([]);
+  private lastDuplicateQuery = '';
   /** Edição por quem não vê dados sensíveis: CPF/CNPJ e RG não são enviados. */
   readonly sensitiveLocked = signal(!!this.data && !this.data.sensitiveVisible);
 
@@ -170,6 +256,15 @@ export class ClientFormDialogComponent {
     profession: [this.data?.profession ?? ''],
     maritalStatus: [this.data?.maritalStatus ?? ''],
     notes: [this.data?.notes ?? ''],
+    nationality: [this.data?.nationality ?? (this.data ? '' : 'Brasileira')],
+    stateRegistration: [this.data?.stateRegistration ?? ''],
+    municipalRegistration: [this.data?.municipalRegistration ?? ''],
+    legalRepresentative: [this.data?.legalRepresentative ?? ''],
+    legalRepresentativeRole: [this.data?.legalRepresentativeRole ?? ''],
+    source: [this.data?.source ?? ''],
+    sourceDetail: [this.data?.sourceDetail ?? ''],
+    responsibleUid: [this.data?.responsibleUid ?? ''],
+    contacts: new FormArray((this.data?.contacts ?? []).map((c) => ClientFormDialogComponent.contactGroup(c))),
     address: this.fb.group({
       zipCode: [this.data?.address?.zipCode ?? ''],
       street: [this.data?.address?.street ?? ''],
@@ -191,6 +286,34 @@ export class ClientFormDialogComponent {
       this.currentType = type;
       this.form.controls.document.updateValueAndValidity();
     });
+  }
+
+  static contactGroup(c?: { name: string; role: string | null; phone: string | null; email: string | null }) {
+    return new FormGroup({
+      name: new FormControl(c?.name ?? '', { nonNullable: true, validators: [Validators.required, Validators.maxLength(120)] }),
+      role: new FormControl(c?.role ?? '', { nonNullable: true }),
+      phone: new FormControl(c?.phone ?? '', { nonNullable: true }),
+      email: new FormControl(c?.email ?? '', { nonNullable: true, validators: [Validators.email] }),
+    });
+  }
+
+  get contacts() {
+    return this.form.controls.contacts;
+  }
+
+  addContact(): void {
+    this.contacts.push(ClientFormDialogComponent.contactGroup());
+  }
+
+  /** Avisa sobre possíveis duplicidades (mesmo documento, telefone, e-mail ou nome). */
+  checkDuplicates(): void {
+    const v = this.form.getRawValue();
+    const params = { name: v.name, document: this.sensitiveLocked() ? '' : v.document, phone: v.phone, email: v.email, excludeId: this.data?.id ?? '' };
+    const key = JSON.stringify(params);
+    if (key === this.lastDuplicateQuery || (!v.name && !v.document && !v.phone && !v.email)) return;
+    this.lastDuplicateQuery = key;
+    this.api.get<DuplicateMatch[]>('/clients/duplicates', params, true).pipe(catchError(() => of([])))
+      .subscribe((d) => this.duplicates.set(d));
   }
 
   isPj(): boolean {
@@ -231,7 +354,17 @@ export class ClientFormDialogComponent {
       maritalStatus: v.type === 'PF' ? empty(v.maritalStatus) : null,
       notes: empty(v.notes),
       address,
-      responsibleUid: this.data?.responsibleUid ?? null,
+      responsibleUid: empty(v.responsibleUid),
+      nationality: v.type === 'PF' ? empty(v.nationality) : null,
+      stateRegistration: v.type === 'PJ' ? empty(v.stateRegistration) : null,
+      municipalRegistration: v.type === 'PJ' ? empty(v.municipalRegistration) : null,
+      legalRepresentative: v.type === 'PJ' ? empty(v.legalRepresentative) : null,
+      legalRepresentativeRole: v.type === 'PJ' ? empty(v.legalRepresentativeRole) : null,
+      contacts: v.type === 'PJ' ? v.contacts.filter((c) => c.name.trim()).map((c) => ({
+        name: c.name.trim(), role: empty(c.role), phone: empty(c.phone), email: empty(c.email),
+      })) : [],
+      source: empty(v.source),
+      sourceDetail: empty(v.sourceDetail),
     };
     this.saving.set(true);
     const request = this.data ? this.service.update(this.data.id, body) : this.service.create(body);

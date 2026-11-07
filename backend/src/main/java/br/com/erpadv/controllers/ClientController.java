@@ -15,7 +15,16 @@ import br.com.erpadv.models.ClientType;
 import br.com.erpadv.security.AuthenticatedUser;
 import br.com.erpadv.services.CaseService;
 import br.com.erpadv.services.ClientService;
+import br.com.erpadv.audit.AuditLog;
+import br.com.erpadv.audit.AuditService;
+import br.com.erpadv.dto.ClientDtos.DuplicateMatch;
+import br.com.erpadv.security.Permission;
 import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -36,10 +45,86 @@ public class ClientController {
 
     private final ClientService clients;
     private final CaseService cases;
+    private final AuditService audit;
 
-    public ClientController(ClientService clients, CaseService cases) {
+    public ClientController(ClientService clients, CaseService cases, AuditService audit) {
         this.clients = clients;
         this.cases = cases;
+        this.audit = audit;
+    }
+
+    /** Possíveis cadastros duplicados (CPF/CNPJ, telefone, e-mail ou nome idêntico). */
+    @GetMapping("/duplicates")
+    @PreAuthorize("hasAuthority('PERM_CLIENTS_READ')")
+    public List<DuplicateMatch> duplicates(@AuthenticationPrincipal AuthenticatedUser user,
+                                           @RequestParam(required = false) String name,
+                                           @RequestParam(required = false) String document,
+                                           @RequestParam(required = false) String phone,
+                                           @RequestParam(required = false) String email,
+                                           @RequestParam(required = false) String excludeId) {
+        return clients.duplicates(user, name, document, phone, email, excludeId);
+    }
+
+    /** Clientes ativos sem atendimento ou movimentação recente. */
+    @GetMapping("/stale")
+    @PreAuthorize("hasAuthority('PERM_CLIENTS_READ')")
+    public List<ClientSummary> stale(@AuthenticationPrincipal AuthenticatedUser user,
+                                     @RequestParam(defaultValue = "90") int days) {
+        return clients.stale(user, days);
+    }
+
+    /** Exporta a lista filtrada ou a seleção (ids) em PDF ou Excel. */
+    @GetMapping("/export")
+    @PreAuthorize("hasAuthority('PERM_CLIENTS_READ') and hasAuthority('PERM_REPORTS_VIEW')")
+    public ResponseEntity<byte[]> export(@AuthenticationPrincipal AuthenticatedUser user,
+                                         @RequestParam(required = false) String search,
+                                         @RequestParam(required = false) ClientStatus status,
+                                         @RequestParam(required = false) ClientType type,
+                                         @RequestParam(required = false) Boolean defaulting,
+                                         @RequestParam(required = false) List<String> ids,
+                                         @RequestParam(defaultValue = "xlsx") String format) {
+        return DashboardController.file(clients.export(user, search, status, type, defaulting, ids, format));
+    }
+
+    /** Ficha cadastral (PDF para imprimir/arquivar ou Excel). */
+    @GetMapping("/{id}/sheet")
+    @PreAuthorize("hasAuthority('PERM_CLIENTS_READ')")
+    public ResponseEntity<byte[]> sheet(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                                        @RequestParam(defaultValue = "pdf") String format) {
+        List<List<String>> rows = null;
+        if (user.has(Permission.CASES_READ)) {
+            rows = new ArrayList<>();
+            for (CaseResponse c : cases.list(user, new CaseFilter(null, null, null, null, null, id, true), null, 100).items()) {
+                rows.add(List.of(c.cnjNumber() == null ? "Sem número" : c.cnjNumber(), c.areaLabel() == null ? "" : c.areaLabel(),
+                        c.court() == null ? "" : c.court(), c.statusLabel() == null ? "" : c.statusLabel()));
+            }
+        }
+        return DashboardController.file(clients.sheet(user, id, format, rows));
+    }
+
+    /** Vínculos que impedem a exclusão definitiva (processos, contratos, financeiro…). */
+    @GetMapping("/{id}/links")
+    @PreAuthorize("hasAuthority('PERM_CLIENTS_READ')")
+    public Map<String, Long> links(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
+        return clients.links(user, id);
+    }
+
+    /** Histórico de alterações do cadastro (trilha de auditoria filtrada pelo cliente). */
+    @GetMapping("/{id}/history")
+    @PreAuthorize("hasAuthority('PERM_CLIENTS_READ')")
+    public CursorPage<AuditLog> history(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                                        @RequestParam(required = false) String cursor,
+                                        @RequestParam(defaultValue = "30") int size) {
+        clients.load(user, id);
+        return audit.list(user.officeId(), "client", id, null, cursor, size);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('PERM_CLIENTS_DELETE')")
+    public void delete(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                       @RequestParam(required = false) String reason) {
+        clients.delete(user, id, reason);
     }
 
     @GetMapping

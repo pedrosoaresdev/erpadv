@@ -26,6 +26,9 @@
 | Sigilo documental | Categorias Inquéritos/Sigilosos sempre sigilosas; documentos sigilosos exigem `DOCUMENTS_CONFIDENTIAL`, documentos de processo criminal exigem `CRIMINAL_READ`; sigilosos nunca liberados ao portal. |
 | Contratos | Honorários de contrato ativo bloqueados para alteração; CPF/CNPJ na minuta apenas para quem tem acesso a dados sensíveis. |
 | Separação patrimonial | Lançamentos pessoais de sócios visíveis apenas ao próprio sócio e excluídos de relatórios do escritório. |
+| Exclusão com obrigação de guarda | Clientes só podem ser excluídos sem processos, contratos, financeiro, documentos, prazos ou compromissos (`CLIENTS_DELETE`); processos só depois de arquivados e sem vínculos (`CASES_DELETE`); motivo obrigatório e registro na auditoria. Nos demais casos, arquivamento. |
+| Exportações e fichas | Exportação de listas exige `REPORTS_VIEW`; documentos sempre mascarados na lista; ficha com CPF/CNPJ completo só para `CLIENTS_SENSITIVE_READ`; toda geração fica na auditoria. |
+| Pesquisa global | Cada categoria respeita a permissão do módulo e o sigilo (processos, prazos e compromissos restritos ocultos sem `CRIMINAL_READ`). |
 | CRM (LGPD) | Minimização: oportunidades não guardam CPF/CNPJ (coletado na conversão, já cifrado no cadastro do cliente); exclusão definitiva disponível ao responsável/sócio (direito de eliminação). |
 | Exportações | CSV com neutralização de injeção de fórmulas (`=`, `+`, `-`, `@`) e registro na auditoria. |
 

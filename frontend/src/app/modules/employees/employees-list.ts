@@ -6,7 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTabsModule } from '@angular/material/tabs';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { Employee } from '../../core/models/models';
 import { ToastService } from '../../core/services/toast.service';
@@ -31,7 +31,7 @@ import { CustomRole, EmployeesService } from './employees.service';
         }
       </app-page-header>
 
-      <mat-tab-group animationDuration="150ms" mat-stretch-tabs="false">
+      <mat-tab-group animationDuration="150ms" mat-stretch-tabs="false" [selectedIndex]="tab()" (selectedIndexChange)="selectTab($event)">
       <mat-tab [label]="'Integrantes (' + items().length + ')'">
       <div class="card tab-card">
         @if (loading()) { <mat-progress-bar mode="indeterminate" /> }
@@ -160,8 +160,18 @@ export class EmployeesListComponent {
   readonly loading = signal(false);
 
   readonly customRoles = signal<CustomRole[]>([]);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  /** Aba ativa vinculada à URL (?aba=cargos), usada pelo item "Permissões" do menu. */
+  readonly tab = signal(0);
+
+  selectTab(index: number): void {
+    this.tab.set(index);
+    void this.router.navigate([], { queryParams: { aba: index === 1 ? 'cargos' : null }, queryParamsHandling: 'merge', replaceUrl: true });
+  }
 
   constructor() {
+    this.route.queryParamMap.subscribe((q) => this.tab.set(q.get('aba') === 'cargos' ? 1 : 0));
     this.load(false);
     this.loadRoles();
   }

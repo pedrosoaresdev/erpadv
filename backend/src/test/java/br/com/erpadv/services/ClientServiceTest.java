@@ -44,7 +44,8 @@ class ClientServiceTest {
         clients = mock(ClientRepository.class);
         audit = mock(AuditService.class);
         crypto = new CryptoService(TestFixtures.properties(false));
-        service = new ClientService(clients, mock(UserRepository.class), crypto, audit);
+        service = new ClientService(clients, mock(UserRepository.class), crypto, audit,
+                mock(com.google.cloud.firestore.Firestore.class), mock(br.com.erpadv.repositories.OfficeRepository.class));
         when(clients.save(anyString(), any(Client.class))).thenAnswer(inv -> {
             Client c = inv.getArgument(1);
             c.setId("c1");

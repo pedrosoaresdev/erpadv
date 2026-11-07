@@ -1,3 +1,4 @@
+import { ActivatedRoute } from '@angular/router';
 import { Component, effect, inject, input, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -142,7 +143,14 @@ export class DocumentsTableComponent {
   readonly cursor = signal<string | null>(null);
   readonly loading = signal(false);
 
+  private readonly route = inject(ActivatedRoute);
+
   constructor() {
+    // Link direto (ex.: pesquisa global): /documentos?doc=<id> abre o visualizador.
+    const docId = this.route.snapshot.queryParamMap.get('doc');
+    if (docId && !this.clientId() && !this.caseId()) {
+      this.service.get(docId).subscribe({ next: (d) => this.open(d), error: () => undefined });
+    }
     this.search$.pipe(debounceTime(350), takeUntilDestroyed()).subscribe((v) => this.search.set(v));
     effect(() => {
       this.search();

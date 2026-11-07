@@ -10,7 +10,15 @@ import br.com.erpadv.models.CaseStatus;
 import br.com.erpadv.models.LegalArea;
 import br.com.erpadv.security.AuthenticatedUser;
 import br.com.erpadv.services.CaseService;
+import br.com.erpadv.audit.AuditLog;
+import br.com.erpadv.audit.AuditService;
+import br.com.erpadv.dto.CaseDtos.CaseRelated;
+import br.com.erpadv.services.CaseInsightsService;
 import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import java.util.List;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -29,9 +37,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class CaseController {
 
     private final CaseService cases;
+    private final CaseInsightsService insights;
+    private final AuditService audit;
 
-    public CaseController(CaseService cases) {
+    public CaseController(CaseService cases, CaseInsightsService insights, AuditService audit) {
         this.cases = cases;
+        this.insights = insights;
+        this.audit = audit;
     }
 
     @GetMapping
@@ -96,5 +108,66 @@ public class CaseController {
     public CaseMovement addMovement(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
                                     @Valid @RequestBody MovementRequest request) {
         return cases.addMovement(user, id, request);
+    }
+
+    /** Exporta a lista filtrada ou a seleção (ids) em PDF ou Excel. */
+    @GetMapping("/export")
+    @PreAuthorize("hasAuthority('PERM_CASES_READ') and hasAuthority('PERM_REPORTS_VIEW')")
+    public ResponseEntity<byte[]> export(@AuthenticationPrincipal AuthenticatedUser user,
+                                         @RequestParam(required = false) String search,
+                                         @RequestParam(required = false) CaseStatus status,
+                                         @RequestParam(required = false) LegalArea area,
+                                         @RequestParam(required = false) String responsibleUid,
+                                         @RequestParam(required = false) String court,
+                                         @RequestParam(defaultValue = "false") boolean includeArchived,
+                                         @RequestParam(required = false) List<String> ids,
+                                         @RequestParam(defaultValue = "xlsx") String format) {
+        CaseFilter filter = new CaseFilter(search, status, area, responsibleUid, court, null, includeArchived);
+        return DashboardController.file(insights.export(user, filter, ids, format));
+    }
+
+    /** Dados das abas do processo: prazos, audiências, financeiro, contratos, tarefas e documentos. */
+    @GetMapping("/{id}/related")
+    @PreAuthorize("hasAuthority('PERM_CASES_READ')")
+    public CaseRelated related(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
+        return insights.related(user, id);
+    }
+
+    /** Ficha/relatório completo do processo (PDF para impressão ou Excel). */
+    @GetMapping("/{id}/report")
+    @PreAuthorize("hasAuthority('PERM_CASES_READ')")
+    public ResponseEntity<byte[]> report(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                                         @RequestParam(defaultValue = "pdf") String format) {
+        return DashboardController.file(insights.report(user, id, format));
+    }
+
+    @GetMapping("/{id}/history")
+    @PreAuthorize("hasAuthority('PERM_CASES_READ')")
+    public CursorPage<AuditLog> history(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                                        @RequestParam(required = false) String cursor,
+                                        @RequestParam(defaultValue = "30") int size) {
+        cases.load(user, id);
+        return audit.list(user.officeId(), "case", id, null, cursor, size);
+    }
+
+    @GetMapping("/{id}/links")
+    @PreAuthorize("hasAuthority('PERM_CASES_READ')")
+    public Map<String, Long> links(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
+        return cases.links(user, id);
+    }
+
+    @PostMapping("/{id}/duplicate")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('PERM_CASES_WRITE')")
+    public CaseResponse duplicate(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
+        return cases.duplicate(user, id);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('PERM_CASES_DELETE')")
+    public void delete(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                       @RequestParam(required = false) String reason) {
+        cases.delete(user, id, reason);
     }
 }

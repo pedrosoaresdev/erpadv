@@ -75,6 +75,10 @@ class SecurityIntegrationTest {
     @MockitoBean
     br.com.erpadv.services.RoleService roleService;
     @MockitoBean
+    br.com.erpadv.services.SearchService searchService;
+    @MockitoBean
+    br.com.erpadv.services.CaseService caseService;
+    @MockitoBean
     ClientService clientService;
     @MockitoBean
     AuthService authService;
@@ -454,5 +458,50 @@ class SecurityIntegrationTest {
                         .content("{\"description\":\"Contestação\",\"type\":\"CONTESTACAO\",\"startDate\":\"2026-11-09\","
                                 + "\"days\":15,\"countingMode\":\"UTEIS\",\"responsibleUid\":\"u1\",\"priority\":\"ALTA\"}"))
                 .andExpect(status().isForbidden());
+    }
+
+    // ------------------------------------------------------------------ Fase 1: exclusão, exportação e pesquisa global
+
+    @Test
+    void somenteQuemPodeExcluiRemoveClienteEProcesso() throws Exception {
+        token("t-adv7", "adv7", "office1", Role.ADVOGADO, now());
+        profile("adv7", "office1", Role.ADVOGADO, UserStatus.ACTIVE, null);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/clients/c1")
+                        .header("Authorization", "Bearer t-adv7"))
+                .andExpect(status().isForbidden());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/cases/p1")
+                        .header("Authorization", "Bearer t-adv7"))
+                .andExpect(status().isForbidden());
+        verify(clientService, never()).delete(any(), any(), any());
+
+        token("t-soc7", "soc7", "office1", Role.SOCIO_ADMIN, now());
+        profile("soc7", "office1", Role.SOCIO_ADMIN, UserStatus.ACTIVE, null);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/clients/c1")
+                        .param("reason", "cadastro em duplicidade").header("Authorization", "Bearer t-soc7"))
+                .andExpect(status().isNoContent());
+        verify(clientService).delete(any(), org.mockito.ArgumentMatchers.eq("c1"), org.mockito.ArgumentMatchers.eq("cadastro em duplicidade"));
+    }
+
+    @Test
+    void exportacaoDeDadosExigeAcessoARelatorios() throws Exception {
+        token("t-est7", "est7", "office1", Role.ESTAGIARIO, now());
+        profile("est7", "office1", Role.ESTAGIARIO, UserStatus.ACTIVE, null);
+        mvc.perform(get("/api/clients/export").header("Authorization", "Bearer t-est7")).andExpect(status().isForbidden());
+        mvc.perform(get("/api/cases/export").header("Authorization", "Bearer t-est7")).andExpect(status().isForbidden());
+        verify(clientService, never()).export(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void pesquisaGlobalEhDaEquipeENaoDoPortal() throws Exception {
+        token("t-cli7", "cli7", "office1", Role.CLIENTE, now());
+        profile("cli7", "office1", Role.CLIENTE, UserStatus.ACTIVE, null);
+        mvc.perform(get("/api/search").param("q", "silva").header("Authorization", "Bearer t-cli7"))
+                .andExpect(status().isForbidden());
+
+        token("t-sec7", "sec7", "office1", Role.SECRETARIA, now());
+        profile("sec7", "office1", Role.SECRETARIA, UserStatus.ACTIVE, null);
+        when(searchService.search(any(), any())).thenReturn(List.of());
+        mvc.perform(get("/api/search").param("q", "silva").header("Authorization", "Bearer t-sec7"))
+                .andExpect(status().isOk());
     }
 }

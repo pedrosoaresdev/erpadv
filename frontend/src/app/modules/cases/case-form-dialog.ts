@@ -11,8 +11,8 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { debounceTime, filter, of, switchMap } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
-import { CaseRequest, CaseStatus, ClientSummary, LegalArea, LegalCase } from '../../core/models/models';
-import { AREA_LABELS, CASE_STATUS_LABELS, UF, enumOptions } from '../../shared/labels';
+import { CasePhase, CaseRequest, CaseStatus, ClientSummary, LegalArea, LegalCase } from '../../core/models/models';
+import { AREA_LABELS, CASE_STATUS_LABELS, INSTANCES, PHASE_LABELS, UF, enumOptions } from '../../shared/labels';
 import { centsToInput, cnjValidator, formatCnj, parseMoneyToCents } from '../../shared/validators/br-validators';
 import { ClientsService } from '../clients/clients.service';
 import { CasesService } from './cases.service';
@@ -54,6 +54,14 @@ interface ClientPick {
           <mat-label>Parte contrária</mat-label>
           <input matInput formControlName="opposingParty" />
         </mat-form-field>
+        <mat-form-field appearance="outline" class="c6">
+          <mat-label>Polo ativo</mat-label>
+          <input matInput formControlName="activeParty" placeholder="Autor(es) / requerente(s)" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="c6">
+          <mat-label>Polo passivo</mat-label>
+          <input matInput formControlName="passiveParty" placeholder="Réu(s) / requerido(s)" />
+        </mat-form-field>
 
         <div class="form-section-title">Identificação processual</div>
         <mat-form-field appearance="outline" class="c6">
@@ -79,14 +87,36 @@ interface ClientPick {
           <input matInput formControlName="proceduralClass" placeholder="Ex.: Procedimento Comum Cível" />
         </mat-form-field>
         <mat-form-field appearance="outline" class="c8">
-          <mat-label>Assunto</mat-label>
+          <mat-label>Assunto principal</mat-label>
           <input matInput formControlName="subject" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="c8">
+          <mat-label>Assuntos secundários (separados por ;)</mat-label>
+          <input matInput formControlName="secondarySubjects" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="c4">
+          <mat-label>Fase processual</mat-label>
+          <mat-select formControlName="phase">
+            <mat-option [value]="null">—</mat-option>
+            @for (o of phases; track o.value) { <mat-option [value]="o.value">{{ o.label }}</mat-option> }
+          </mat-select>
         </mat-form-field>
 
         <div class="form-section-title">Juízo</div>
         <mat-form-field appearance="outline" class="c3">
           <mat-label>Tribunal</mat-label>
           <input matInput formControlName="court" placeholder="TJSP, TRT2, STJ…" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="c3">
+          <mat-label>Instância</mat-label>
+          <mat-select formControlName="instance">
+            <mat-option value="">—</mat-option>
+            @for (i of instances; track i) { <mat-option [value]="i">{{ i }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="c6">
+          <mat-label>Juízo / órgão julgador</mat-label>
+          <input matInput formControlName="judgingBody" placeholder="Ex.: 2º Juizado Especial Cível" />
         </mat-form-field>
         <mat-form-field appearance="outline" class="c4">
           <mat-label>Vara</mat-label>
@@ -122,7 +152,8 @@ interface ClientPick {
           <input matInput type="date" formControlName="distributionDate" [max]="today" />
         </mat-form-field>
         <div class="toggle">
-          <mat-slide-toggle formControlName="confidential" [disabled]="!canCriminal">Processo sigiloso (acesso restrito)</mat-slide-toggle>
+          <mat-slide-toggle formControlName="freeJustice">Justiça gratuita</mat-slide-toggle>
+          <mat-slide-toggle formControlName="confidential" [disabled]="!canCriminal">Segredo de justiça / sigiloso (acesso restrito)</mat-slide-toggle>
           @if (!canCriminal) { <span class="muted small">Requer permissão do departamento criminal.</span> }
         </div>
         <mat-form-field appearance="outline">
@@ -154,6 +185,8 @@ export class CaseFormDialogComponent {
   readonly areas = enumOptions(AREA_LABELS);
   readonly statuses = enumOptions(CASE_STATUS_LABELS, ['ARQUIVADO']);
   readonly ufs = UF;
+  readonly instances = INSTANCES;
+  readonly phases = enumOptions(PHASE_LABELS);
   readonly today = new Date().toISOString().slice(0, 10);
   readonly saving = signal(false);
   readonly lawyers = toSignal(this.service.lawyers(), { initialValue: [] });
@@ -182,6 +215,13 @@ export class CaseFormDialogComponent {
     distributionDate: [this.c?.distributionDate ?? ''],
     confidential: [this.c?.confidential ?? false],
     notes: [this.c?.notes ?? ''],
+    activeParty: [this.c?.activeParty ?? ''],
+    passiveParty: [this.c?.passiveParty ?? ''],
+    instance: [this.c?.instance ?? ''],
+    judgingBody: [this.c?.judgingBody ?? ''],
+    secondarySubjects: [(this.c?.secondarySubjects ?? []).join('; ')],
+    freeJustice: [this.c?.freeJustice ?? false],
+    phase: [(this.c?.phase ?? null) as CasePhase | null],
   });
 
   constructor() {
@@ -238,6 +278,13 @@ export class CaseFormDialogComponent {
       status: v.status,
       notes: empty(v.notes),
       confidential: v.confidential,
+      activeParty: empty(v.activeParty),
+      passiveParty: empty(v.passiveParty),
+      instance: empty(v.instance),
+      judgingBody: empty(v.judgingBody),
+      secondarySubjects: v.secondarySubjects.split(';').map((x) => x.trim()).filter(Boolean).slice(0, 10),
+      freeJustice: v.freeJustice,
+      phase: v.phase,
     };
     this.saving.set(true);
     const request = this.c ? this.service.update(this.c.id, body) : this.service.create(body);

@@ -15,6 +15,7 @@ import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 public final class ClientDtos {
 
@@ -36,7 +37,34 @@ public final class ClientDtos {
             @Size(max = 100) String profession,
             @Size(max = 40) String maritalStatus,
             @Size(max = 4000) String notes,
-            @Size(max = 128) String responsibleUid) {
+            @Size(max = 128) String responsibleUid,
+            @Size(max = 60) String nationality,
+            @Size(max = 30) String stateRegistration,
+            @Size(max = 30) String municipalRegistration,
+            @Size(max = 150) String legalRepresentative,
+            @Size(max = 80) String legalRepresentativeRole,
+            @Size(max = 10) List<@Valid ContactRequest> contacts,
+            @jakarta.validation.constraints.Pattern(regexp = "^$|^[A-Z_]{2,20}$", message = "Origem inválida") String source,
+            @Size(max = 120) String sourceDetail) {
+
+        /** Compatibilidade com chamadas anteriores (sem os campos complementares). */
+        public ClientRequest(ClientType type, String name, String tradeName, String document, String rg, LocalDate birthDate,
+                             String phone, String whatsapp, String email, Address address, String profession,
+                             String maritalStatus, String notes, String responsibleUid) {
+            this(type, name, tradeName, document, rg, birthDate, phone, whatsapp, email, address, profession, maritalStatus,
+                    notes, responsibleUid, null, null, null, null, null, null, null, null);
+        }
+    }
+
+    public record ContactRequest(
+            @NotBlank @Size(max = 120) String name,
+            @Size(max = 80) String role,
+            @Size(max = 20) String phone,
+            @Email @Size(max = 150) String email) {
+    }
+
+    /** Possível duplicidade: cliente existente e o motivo (documento, telefone, e-mail ou nome). */
+    public record DuplicateMatch(ClientSummary client, String reason) {
     }
 
     public record ClientSummary(
@@ -75,7 +103,16 @@ public final class ClientDtos {
             Instant inactivatedAt,
             String inactivationReason,
             Instant createdAt,
-            Instant updatedAt) {
+            Instant updatedAt,
+            String nationality,
+            String stateRegistration,
+            String municipalRegistration,
+            String legalRepresentative,
+            String legalRepresentativeRole,
+            List<br.com.erpadv.models.ClientContact> contacts,
+            String source,
+            String sourceDetail,
+            Instant lastActivityAt) {
     }
 
     public record InactivateRequest(@NotBlank @Size(max = 500) String reason) {

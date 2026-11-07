@@ -12,10 +12,12 @@ public enum Permission {
     CLIENTS_WRITE("clients", "Cadastrar e editar clientes"),
     CLIENTS_SENSITIVE_READ("clients", "Ver CPF/CNPJ e RG completos"),
     CLIENTS_INACTIVATE("clients", "Inativar e reativar clientes"),
+    CLIENTS_DELETE("clients", "Excluir clientes sem vínculos"),
 
     CASES_READ("cases", "Consultar processos"),
     CASES_WRITE("cases", "Cadastrar e editar processos e movimentações"),
     CASES_ARCHIVE("cases", "Arquivar processos"),
+    CASES_DELETE("cases", "Excluir processos arquivados sem vínculos"),
 
     DEADLINES_READ("deadlines", "Consultar prazos"),
     DEADLINES_WRITE("deadlines", "Gerenciar prazos"),

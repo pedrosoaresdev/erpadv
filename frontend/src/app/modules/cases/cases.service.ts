@@ -2,7 +2,9 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, shareReplay } from 'rxjs';
 import { ApiService } from '../../core/api/api.service';
 import {
+  AuditLog,
   CaseMovement,
+  CaseRelated,
   CaseRequest,
   CaseStatus,
   CursorPage,
@@ -54,7 +56,35 @@ export class CasesService {
     return this.api.get(`/cases/${encodeURIComponent(id)}/movements`, { cursor, size: 30 });
   }
 
-  addMovement(id: string, body: { type: MovementType; date: string; title: string; description: string | null }): Observable<CaseMovement> {
+  related(id: string): Observable<CaseRelated> {
+    return this.api.get(`/cases/${encodeURIComponent(id)}/related`);
+  }
+
+  history(id: string, cursor: string | null): Observable<CursorPage<AuditLog>> {
+    return this.api.get(`/cases/${encodeURIComponent(id)}/history`, { cursor, size: 30 });
+  }
+
+  links(id: string): Observable<Record<string, number>> {
+    return this.api.get(`/cases/${encodeURIComponent(id)}/links`);
+  }
+
+  duplicate(id: string): Observable<LegalCase> {
+    return this.api.post(`/cases/${encodeURIComponent(id)}/duplicate`);
+  }
+
+  delete(id: string, reason: string): Observable<void> {
+    return this.api.delete(`/cases/${encodeURIComponent(id)}?reason=${encodeURIComponent(reason)}`);
+  }
+
+  report(id: string, format: 'pdf' | 'xlsx') {
+    return this.api.getBlob(`/cases/${encodeURIComponent(id)}/report`, { format });
+  }
+
+  export(filter: CaseFilter, ids: string[], format: 'pdf' | 'xlsx') {
+    return this.api.getBlob('/cases/export', { ...filter, ids: ids.length ? ids.join(',') : undefined, format });
+  }
+
+  addMovement(id: string, body: { type: MovementType; date: string; title: string; description: string | null; important?: boolean }): Observable<CaseMovement> {
     return this.api.post(`/cases/${encodeURIComponent(id)}/movements`, body);
   }
 

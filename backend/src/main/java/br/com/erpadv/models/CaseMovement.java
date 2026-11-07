@@ -16,6 +16,8 @@ public class CaseMovement extends BaseEntity {
     private String description;
     /** MANUAL ou INTEGRACAO (consulta processual automatizada — etapa futura). */
     private String source;
+    /** Marcada como importante (destaque na linha do tempo e nos alertas). */
+    private boolean important;
     private String authorUid;
     private String authorName;
     /** Ordenação estável da linha do tempo: data do ato + instante do registro. */

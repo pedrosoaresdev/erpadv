@@ -23,7 +23,35 @@ public final class DashboardDtos {
             HearingStats hearings,
             ContractStats contracts,
             /** Indicadores que dependem de módulos ainda não implantados → etapa prevista. */
-            Map<String, String> pendingModules) {
+            Map<String, String> pendingModules,
+            String lawyerUid,
+            DeadlineWindows deadlineWindows,
+            CaseExtra caseExtra,
+            long agendaNext7Days,
+            List<DeadlineMonth> deadlineTrend,
+            List<NamedCount> casesByCourt,
+            List<NamedCount> clientsBySource,
+            List<TeamMember> team,
+            Comparison previous) {
+    }
+
+    /** Prazos pendentes que vencem nos próximos N dias (excluindo hoje). */
+    public record DeadlineWindows(long next3Days, long next7Days, long next15Days) {
+    }
+
+    /** {@code awaitingMovement}: ativos sem movimentação há {@code staleDays} dias ou mais. */
+    public record CaseExtra(long suspended, long awaitingMovement, int staleDays) {
+    }
+
+    /** Prazos cumpridos × não cumpridos (pendentes já vencidos) por mês de vencimento. */
+    public record DeadlineMonth(String month, long completed, long missed) {
+    }
+
+    public record TeamMember(String uid, String name, long activeCases, long deadlinesCompleted, long deadlinesOverdue) {
+    }
+
+    /** Mesmos indicadores no período anterior de mesma duração. */
+    public record Comparison(LocalDate from, LocalDate to, long newClients, long newCases, long deadlinesCompleted) {
     }
 
     public record DeadlineStats(long dueToday, long urgent, long overdue, long upcoming, long completedInPeriod,

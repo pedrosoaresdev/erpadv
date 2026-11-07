@@ -15,8 +15,8 @@ export interface ApiProblem {
 
 export type Permission =
   | 'DASHBOARD_VIEW' | 'FINANCE_DASHBOARD_VIEW'
-  | 'CLIENTS_READ' | 'CLIENTS_WRITE' | 'CLIENTS_SENSITIVE_READ' | 'CLIENTS_INACTIVATE'
-  | 'CASES_READ' | 'CASES_WRITE' | 'CASES_ARCHIVE'
+  | 'CLIENTS_READ' | 'CLIENTS_WRITE' | 'CLIENTS_SENSITIVE_READ' | 'CLIENTS_INACTIVATE' | 'CLIENTS_DELETE'
+  | 'CASES_READ' | 'CASES_WRITE' | 'CASES_ARCHIVE' | 'CASES_DELETE'
   | 'DEADLINES_READ' | 'DEADLINES_WRITE' | 'CALENDAR_READ' | 'CALENDAR_WRITE'
   | 'FINANCE_READ' | 'FINANCE_WRITE' | 'CONTRACTS_READ' | 'CONTRACTS_WRITE'
   | 'DOCUMENTS_READ' | 'DOCUMENTS_WRITE' | 'DOCUMENTS_CONFIDENTIAL'
@@ -96,6 +96,27 @@ export interface Client {
   inactivationReason: string | null;
   createdAt: string;
   updatedAt: string;
+  nationality: string | null;
+  stateRegistration: string | null;
+  municipalRegistration: string | null;
+  legalRepresentative: string | null;
+  legalRepresentativeRole: string | null;
+  contacts: ClientContact[] | null;
+  source: string | null;
+  sourceDetail: string | null;
+  lastActivityAt: string | null;
+}
+
+export interface ClientContact {
+  name: string;
+  role: string | null;
+  phone: string | null;
+  email: string | null;
+}
+
+export interface DuplicateMatch {
+  client: ClientSummary;
+  reason: string;
 }
 
 export interface ClientRequest {
@@ -113,6 +134,14 @@ export interface ClientRequest {
   maritalStatus?: string | null;
   notes?: string | null;
   responsibleUid?: string | null;
+  nationality?: string | null;
+  stateRegistration?: string | null;
+  municipalRegistration?: string | null;
+  legalRepresentative?: string | null;
+  legalRepresentativeRole?: string | null;
+  contacts?: ClientContact[];
+  source?: string | null;
+  sourceDetail?: string | null;
 }
 
 export interface ClientInteraction {
@@ -132,7 +161,10 @@ export type LegalArea =
   | 'EMPRESARIAL' | 'CONSUMIDOR' | 'ADMINISTRATIVO' | 'AMBIENTAL' | 'OUTRO';
 export type CaseStatus = 'EM_ANDAMENTO' | 'AGUARDANDO_JULGAMENTO' | 'EM_RECURSO' | 'SUSPENSO' | 'ENCERRADO' | 'ARQUIVADO';
 export type MovementType =
-  | 'MOVIMENTACAO' | 'DESPACHO' | 'DECISAO' | 'SENTENCA' | 'ACORDAO' | 'AUDIENCIA' | 'PETICAO' | 'NOTA_INTERNA' | 'SISTEMA';
+  | 'MOVIMENTACAO' | 'DESPACHO' | 'DECISAO' | 'SENTENCA' | 'RECURSO' | 'TRANSITO_JULGADO' | 'SUSPENSAO' | 'ACORDAO'
+  | 'AUDIENCIA' | 'PETICAO' | 'NOTA_INTERNA' | 'SISTEMA';
+
+export type CasePhase = 'POSTULATORIA' | 'INSTRUTORIA' | 'DECISORIA' | 'RECURSAL' | 'CUMPRIMENTO' | 'EXECUCAO' | 'ENCERRAMENTO';
 
 export interface LegalCase {
   id: string;
@@ -161,6 +193,28 @@ export interface LegalCase {
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  activeParty: string | null;
+  passiveParty: string | null;
+  instance: string | null;
+  judgingBody: string | null;
+  secondarySubjects: string[] | null;
+  lawyerOab: string | null;
+  freeJustice: boolean;
+  phase: CasePhase | null;
+  phaseLabel: string | null;
+  sentenceDate: string | null;
+  finalJudgmentDate: string | null;
+  responsibleHistory: { uid: string; name: string; from: string; to: string | null }[] | null;
+  lastMovementAt: string | null;
+}
+
+export interface CaseRelated {
+  deadlines: { id: string; description: string; dueDate: string; status: string; validated: boolean; responsibleName: string }[] | null;
+  appointments: { id: string; title: string; type: string; typeLabel: string; start: string; end: string; location: string | null }[] | null;
+  transactions: { id: string; direction: 'RECEITA' | 'DESPESA'; categoryLabel: string; description: string; amountCents: number; dueDate: string; status: string; paidDate: string | null }[] | null;
+  contracts: { id: string; number: string; title: string; status: string; feeModel: string }[] | null;
+  cards: { id: string; boardId: string; boardName: string; title: string; columnName: string; dueDate: string | null; completed: boolean }[] | null;
+  documents: number;
 }
 
 export interface CaseRequest {
@@ -180,6 +234,13 @@ export interface CaseRequest {
   status: CaseStatus;
   notes?: string | null;
   confidential: boolean;
+  activeParty?: string | null;
+  passiveParty?: string | null;
+  instance?: string | null;
+  judgingBody?: string | null;
+  secondarySubjects?: string[];
+  freeJustice?: boolean;
+  phase?: CasePhase | null;
 }
 
 export interface CaseMovement {
@@ -193,6 +254,7 @@ export interface CaseMovement {
   authorUid: string;
   authorName: string;
   createdAt: string;
+  important?: boolean;
 }
 
 // ------------------------------------------------------------------ equipe
@@ -268,6 +330,15 @@ export interface Dashboard {
   hearings: { next30Days: number; byMonth: MonthPoint[] };
   contracts: { active: number; expiring30Days: number; drafts: number };
   pendingModules: Record<string, string>;
+  lawyerUid: string | null;
+  deadlineWindows: { next3Days: number; next7Days: number; next15Days: number };
+  caseExtra: { suspended: number; awaitingMovement: number; staleDays: number };
+  agendaNext7Days: number;
+  deadlineTrend: { month: string; completed: number; missed: number }[];
+  casesByCourt: NamedCount[];
+  clientsBySource: NamedCount[];
+  team: { uid: string; name: string; activeCases: number; deadlinesCompleted: number; deadlinesOverdue: number }[];
+  previous: { from: string; to: string; newClients: number; newCases: number; deadlinesCompleted: number };
 }
 
 // ------------------------------------------------------------------ auditoria
@@ -296,6 +367,7 @@ export interface AuditVerifyResult {
 
 export interface AppNotification {
   id: string;
+  type: string;
   title: string;
   body: string;
   link: string | null;

@@ -2,6 +2,20 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
+import { MatDialog } from '@angular/material/dialog';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatSelectModule } from '@angular/material/select';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { FormsModule } from '@angular/forms';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { Router } from '@angular/router';
+import { EmployeeOption } from '../../core/models/models';
+import { ToastService } from '../../core/services/toast.service';
+import { saveBlob } from '../finance/finance.service';
+import { ClientFormDialogComponent } from '../clients/client-form-dialog';
+import { CaseFormDialogComponent } from '../cases/case-form-dialog';
+import { AppointmentDialogComponent } from '../calendar/appointment-dialog';
+import { catchError, of } from 'rxjs';
 import { RouterLink } from '@angular/router';
 import { ChartConfiguration } from 'chart.js';
 import { ApiService } from '../../core/api/api.service';
@@ -27,8 +41,8 @@ const iso = (d: Date) =>
 @Component({
   selector: 'app-dashboard',
   imports: [
-    RouterLink, MatButtonModule, MatButtonToggleModule, MatIconModule, PageHeaderComponent, StatCardComponent,
-    ChartComponent, LoadingComponent, EmptyStateComponent,
+    RouterLink, FormsModule, MatButtonModule, MatButtonToggleModule, MatIconModule, MatMenuModule, MatSelectModule, MatTooltipModule,
+    PageHeaderComponent, StatCardComponent, ChartComponent, LoadingComponent, EmptyStateComponent,
   ],
   template: `
     <div class="page">
@@ -39,19 +53,38 @@ const iso = (d: Date) =>
           <mat-button-toggle value="12m">12 meses</mat-button-toggle>
           <mat-button-toggle value="ytd">Ano atual</mat-button-toggle>
         </mat-button-toggle-group>
-        <button mat-icon-button (click)="load()" aria-label="Atualizar"><mat-icon>refresh</mat-icon></button>
+        @if (lawyers().length) {
+          <mat-select class="lawyer" [ngModel]="lawyer()" (ngModelChange)="setLawyer($event)" aria-label="Filtrar por advogado" placeholder="Advogado">
+            <mat-option value="">Todo o escritório</mat-option>
+            @for (l of lawyers(); track l.uid) { <mat-option [value]="l.uid">{{ l.displayName }}</mat-option> }
+          </mat-select>
+        }
+        <button mat-icon-button (click)="load()" aria-label="Atualizar" matTooltip="Atualizar"><mat-icon>refresh</mat-icon></button>
+        <button mat-stroked-button [matMenuTriggerFor]="exportMenu" [disabled]="exporting()"><mat-icon>download</mat-icon>Exportar</button>
+        <mat-menu #exportMenu="matMenu" xPosition="before">
+          <button mat-menu-item (click)="export('pdf')"><mat-icon>picture_as_pdf</mat-icon>PDF</button>
+          <button mat-menu-item (click)="export('xlsx')"><mat-icon>table_view</mat-icon>Excel</button>
+        </mat-menu>
       </app-page-header>
+
+      <nav class="quick" aria-label="Atalhos">
+        @if (auth.has('CLIENTS_WRITE')) { <button class="qa" (click)="newClient()"><mat-icon>person_add</mat-icon>Novo cliente</button> }
+        @if (auth.has('CASES_WRITE')) { <button class="qa" (click)="newCase()"><mat-icon>post_add</mat-icon>Novo processo</button> }
+        @if (auth.has('BOARDS_USE')) { <a class="qa" routerLink="/quadros"><mat-icon>add_task</mat-icon>Nova tarefa</a> }
+        @if (auth.has('CALENDAR_WRITE')) { <button class="qa" (click)="newAppointment()"><mat-icon>event</mat-icon>Novo compromisso</button> }
+        @if (auth.has('DEADLINES_READ')) { <a class="qa" routerLink="/prazos"><mat-icon>alarm</mat-icon>Prazos</a> }
+      </nav>
 
       @if (loading() && !data()) {
         <app-loading />
       } @else if (data(); as d) {
         <section class="kpis">
           <app-stat-card label="Clientes" [value]="d.clients.total" icon="groups" [accent]="true"
-            [hint]="d.clients.active + ' ativos · ' + d.clients.newInPeriod + ' novos no período'" />
+            [hint]="d.clients.active + ' ativos · ' + d.clients.inactive + ' inativos · ' + d.clients.newInPeriod + ' novos ' + delta(d.clients.newInPeriod, d.previous.newClients)" />
           <app-stat-card label="Processos" [value]="d.cases.total" icon="gavel"
-            [hint]="d.cases.newInPeriod + ' novos no período'" tone="success" />
-          <app-stat-card label="Em andamento" [value]="d.cases.inProgress" icon="pending_actions"
-            [hint]="d.cases.closed + ' encerrados · ' + d.cases.archived + ' arquivados'" />
+            [hint]="d.cases.newInPeriod + ' novos ' + delta(d.cases.newInPeriod, d.previous.newCases)" tone="success" />
+          <app-stat-card label="Processos ativos" [value]="d.cases.inProgress" icon="pending_actions"
+            [hint]="d.caseExtra.suspended + ' suspensos · ' + d.cases.closed + ' encerrados · ' + d.cases.archived + ' arquivados'" />
           <app-stat-card label="Clientes inadimplentes" [value]="d.clients.defaulting" icon="report"
             [hint]="d.clients.defaulting ? 'Requer atenção do financeiro' : 'Nenhuma pendência'" [tone]="d.clients.defaulting ? 'danger' : 'success'" />
         </section>
@@ -69,6 +102,17 @@ const iso = (d: Date) =>
             [hint]="d.contracts.expiring30Days + ' terminando em 30 dias · ' + d.contracts.drafts + ' rascunho(s)'" [tone]="d.contracts.expiring30Days ? 'warning' : ''" /></a>
         </section>
 
+        <section class="kpis second">
+          <a class="kpi-link" routerLink="/prazos"><app-stat-card label="Prazos nos próximos dias" [value]="d.deadlineWindows.next7Days" icon="date_range"
+            [hint]="'3 dias: ' + d.deadlineWindows.next3Days + ' · 15 dias: ' + d.deadlineWindows.next15Days" /></a>
+          <a class="kpi-link" routerLink="/agenda"><app-stat-card label="Compromissos (7 dias)" [value]="d.agendaNext7Days" icon="calendar_month"
+            hint="Agenda da equipe nos próximos 7 dias" /></a>
+          <a class="kpi-link" routerLink="/processos"><app-stat-card label="Aguardando movimentação" [value]="d.caseExtra.awaitingMovement" icon="hourglass_empty"
+            [hint]="'Ativos sem movimentação há ' + d.caseExtra.staleDays + '+ dias'" [tone]="d.caseExtra.awaitingMovement ? 'warning' : 'success'" /></a>
+          <a class="kpi-link" routerLink="/prazos"><app-stat-card label="Prazos cumpridos no período" [value]="d.deadlines.completedInPeriod" icon="task_alt"
+            [hint]="'Período anterior: ' + d.previous.deadlinesCompleted + ' ' + delta(d.deadlines.completedInPeriod, d.previous.deadlinesCompleted)" tone="success" /></a>
+        </section>
+
         @if (finance(); as f) {
           <section class="kpis second">
             <a class="kpi-link" routerLink="/financeiro"><app-stat-card label="Faturamento do mês" [value]="money(f.currentMonthIncomeCents)" icon="payments" [accent]="true"
@@ -76,7 +120,8 @@ const iso = (d: Date) =>
             <a class="kpi-link" routerLink="/financeiro"><app-stat-card label="Honorários recebidos" [value]="money(f.feesReceivedCents)" icon="gavel"
               [hint]="'Pendentes: ' + money(f.feesPendingCents)" tone="success" /></a>
             <a class="kpi-link" routerLink="/financeiro"><app-stat-card label="Despesas pagas" [value]="money(f.paidCents)" icon="receipt_long"
-              [hint]="'Saldo do período: ' + money(f.balanceCents)" [tone]="f.balanceCents >= 0 ? 'success' : 'danger'" /></a>
+              [hint]="'Rentabilidade: ' + margin(f) + '% · resultado ' + money(f.balanceCents) + (prevFinance() ? ' ' + delta(f.receivedCents, prevFinance()!.receivedCents) + ' na receita' : '')"
+              [tone]="f.balanceCents >= 0 ? 'success' : 'danger'" /></a>
             <a class="kpi-link" routerLink="/financeiro"><app-stat-card label="Honorários/receitas em atraso" [value]="money(f.overdueReceivableCents)" icon="report"
               [hint]="f.overdueReceivableCount + ' título(s) vencido(s)'" [tone]="f.overdueReceivableCount ? 'danger' : 'success'" /></a>
           </section>
@@ -124,6 +169,47 @@ const iso = (d: Date) =>
             <app-chart [config]="hearingsChart()" [height]="260" />
           </div>
           <div class="card card-pad">
+            <div class="card-title"><mat-icon>fact_check</mat-icon>Prazos cumpridos × não cumpridos</div>
+            <app-chart [config]="deadlineTrendChart()" [height]="260" />
+          </div>
+          <div class="card card-pad">
+            <div class="card-title"><mat-icon>account_balance</mat-icon>Processos por tribunal</div>
+            @if (d.casesByCourt.length) {
+              <app-chart [config]="courtChart()" [height]="260" />
+            } @else {
+              <app-empty-state icon="account_balance" title="Sem processos" />
+            }
+          </div>
+          <div class="card card-pad">
+            <div class="card-title"><mat-icon>hub</mat-icon>Origem dos novos clientes</div>
+            @if (d.clientsBySource.length) {
+              <app-chart [config]="sourceChart()" [height]="260" />
+            } @else {
+              <app-empty-state icon="hub" title="Nenhum cliente novo no período" />
+            }
+          </div>
+          <div class="card card-pad span-2">
+            <div class="card-title"><mat-icon>groups</mat-icon>Desempenho da equipe</div>
+            @if (d.team.length) {
+              <div class="table-wrap">
+                <table class="data compact">
+                  <thead><tr><th>Advogado</th><th>Processos ativos</th><th>Prazos cumpridos</th><th>Prazos vencidos</th><th>Cumprimento</th></tr></thead>
+                  <tbody>
+                    @for (t of d.team; track t.uid) {
+                      <tr>
+                        <td>{{ t.name }}</td><td class="mono">{{ t.activeCases }}</td><td class="mono">{{ t.deadlinesCompleted }}</td>
+                        <td class="mono" [class.bad]="t.deadlinesOverdue">{{ t.deadlinesOverdue }}</td>
+                        <td><span class="bar"><span [style.width.%]="rate(t)"></span></span> <span class="mono small">{{ rate(t) }}%</span></td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            } @else {
+              <app-empty-state icon="badge" title="Sem advogados ativos" />
+            }
+          </div>
+          <div class="card card-pad">
             <div class="card-title"><mat-icon>workspace_premium</mat-icon>Carteira ativa por advogado</div>
             @if (d.productivity.length) {
               <app-chart [config]="productivityChart()" [height]="260" />
@@ -145,14 +231,111 @@ const iso = (d: Date) =>
     .pending-item mat-icon { font-size: 16px; width: 16px; height: 16px; color: var(--app-gold); }
     .charts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 8px; }
     .span-2 { grid-column: span 2; }
+    .lawyer { width: 210px; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 10px; padding: 9px 12px; box-sizing: border-box; }
+    .quick { display: flex; gap: 10px; flex-wrap: wrap; margin: -6px 0 18px; }
+    .qa { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--app-border);
+      background: var(--app-surface); color: var(--app-text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; }
+    .qa mat-icon { font-size: 18px; width: 18px; height: 18px; color: var(--app-gold); }
+    .qa:hover, .qa:focus-visible { border-color: var(--app-gold); background: var(--app-gold-soft); outline: none; }
+    .compact td, .compact th { padding: 9px 12px; }
+    .bad { color: var(--app-danger); font-weight: 700; }
+    .bar { display: inline-block; width: 90px; height: 6px; border-radius: 4px; background: var(--app-border); overflow: hidden; vertical-align: middle; }
+    .bar span { display: block; height: 100%; background: var(--app-success); }
+    .small { font-size: 12px; }
     @media (max-width: 1200px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .charts { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 760px) { .kpis, .charts { grid-template-columns: 1fr; } .span-2 { grid-column: auto; } }
   `,
 })
 export class DashboardComponent {
   private readonly api = inject(ApiService);
-  private readonly auth = inject(AuthService);
+  readonly auth = inject(AuthService);
   private readonly financeApi = inject(FinanceService);
+  private readonly dialog = inject(MatDialog);
+  private readonly router = inject(Router);
+  private readonly toast = inject(ToastService);
+  readonly lawyers = toSignal(this.api.get<EmployeeOption[]>('/employees/lawyers', undefined, true).pipe(catchError(() => of([]))),
+    { initialValue: [] as EmployeeOption[] });
+  readonly lawyer = signal('');
+  readonly exporting = signal(false);
+  readonly prevFinance = signal<FinanceSummary | null>(null);
+  private range: { from: string; to: string } = { from: '', to: '' };
+
+  /** Variação percentual em relação ao período anterior (ex.: "▲ 20%"). */
+  delta(current: number, previous: number): string {
+    if (!previous) return current ? '(novo)' : '';
+    const pct = Math.round(((current - previous) / previous) * 100);
+    return pct === 0 ? '(= anterior)' : `(${pct > 0 ? '▲' : '▼'} ${Math.abs(pct)}%)`;
+  }
+
+  margin(f: FinanceSummary): number {
+    return f.receivedCents ? Math.round((f.balanceCents / f.receivedCents) * 100) : 0;
+  }
+
+  rate(t: { deadlinesCompleted: number; deadlinesOverdue: number }): number {
+    const total = t.deadlinesCompleted + t.deadlinesOverdue;
+    return total ? Math.round((t.deadlinesCompleted / total) * 100) : 100;
+  }
+
+  setLawyer(uid: string): void {
+    this.lawyer.set(uid);
+    this.load();
+  }
+
+  export(format: 'pdf' | 'xlsx'): void {
+    this.exporting.set(true);
+    this.api.getBlob('/dashboard/export', { ...this.range, lawyerUid: this.lawyer() || null, format }).subscribe({
+      next: (r) => { saveBlob(r, `dashboard.${format}`); this.exporting.set(false); },
+      error: () => { this.exporting.set(false); this.toast.error('Não foi possível exportar o painel.'); },
+    });
+  }
+
+  newClient(): void {
+    this.dialog.open(ClientFormDialogComponent, { data: null, width: '860px', maxWidth: '96vw' }).afterClosed()
+      .subscribe((c?: { id: string }) => { if (c?.id) void this.router.navigate(['/clientes', c.id]); });
+  }
+
+  newCase(): void {
+    this.dialog.open(CaseFormDialogComponent, { data: {}, width: '900px', maxWidth: '96vw' }).afterClosed()
+      .subscribe((c?: { id: string }) => { if (c?.id) void this.router.navigate(['/processos', c.id]); });
+  }
+
+  newAppointment(): void {
+    this.dialog.open(AppointmentDialogComponent, { data: { date: new Date() }, width: '820px', maxWidth: '96vw' }).afterClosed()
+      .subscribe((r) => { if (r && r !== 'deleted') { this.toast.success('Compromisso agendado.'); this.load(); } });
+  }
+
+  readonly deadlineTrendChart = computed<ChartConfiguration>(() => {
+    const items = this.data()?.deadlineTrend ?? [];
+    return {
+      type: 'bar',
+      data: {
+        labels: items.map((p) => fmtMonth(p.month)),
+        datasets: [
+          { label: 'Cumpridos', data: items.map((p) => p.completed), backgroundColor: '#2f855a', borderRadius: 6 },
+          { label: 'Não cumpridos', data: items.map((p) => p.missed), backgroundColor: '#b42318', borderRadius: 6 },
+        ],
+      },
+      options: { plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } } },
+    };
+  });
+
+  readonly courtChart = computed<ChartConfiguration>(() => {
+    const items = this.data()?.casesByCourt ?? [];
+    return {
+      type: 'bar',
+      data: { labels: items.map((i) => i.label), datasets: [{ label: 'Processos', data: items.map((i) => i.value), backgroundColor: CHART_COLORS[0], borderRadius: 6 }] },
+      options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { grid: { display: false } } } },
+    };
+  });
+
+  readonly sourceChart = computed<ChartConfiguration>(() => {
+    const items = this.data()?.clientsBySource ?? [];
+    return {
+      type: 'doughnut',
+      data: { labels: items.map((i) => i.label), datasets: [{ data: items.map((i) => i.value), backgroundColor: CHART_COLORS, borderWidth: 0 }] },
+      options: { cutout: '62%', plugins: { legend: { position: 'bottom' } } } as ChartConfiguration['options'],
+    };
+  });
 
   readonly period = signal<PeriodKey>('12m');
   readonly data = signal<Dashboard | null>(null);
@@ -295,11 +478,18 @@ export class DashboardComponent {
       default: from = new Date(today.getFullYear(), today.getMonth() - 11, 1);
     }
     this.loading.set(true);
+    this.range = { from: iso(from), to: iso(today) };
     if (this.auth.has('FINANCE_DASHBOARD_VIEW')) {
-      this.financeApi.dashboard(iso(from), iso(new Date(today.getFullYear(), today.getMonth() + 1, 0))).subscribe({ next: (f) => this.finance.set(f), error: () => this.finance.set(null) });
+      const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      this.financeApi.dashboard(iso(from), iso(end)).subscribe({ next: (f) => this.finance.set(f), error: () => this.finance.set(null) });
+      // Mesmo intervalo imediatamente anterior, para comparação de receita.
+      const span = end.getTime() - from.getTime();
+      const prevEnd = new Date(from.getTime() - 86_400_000);
+      const prevFrom = new Date(prevEnd.getTime() - span);
+      this.financeApi.dashboard(iso(prevFrom), iso(prevEnd)).subscribe({ next: (f) => this.prevFinance.set(f), error: () => this.prevFinance.set(null) });
       if (this.auth.has('FINANCE_READ')) this.financeApi.delinquency().subscribe((d) => this.delinquency.set(d));
     }
-    this.api.get<Dashboard>('/dashboard', { from: iso(from), to: iso(today) }).subscribe({
+    this.api.get<Dashboard>('/dashboard', { ...this.range, lawyerUid: this.lawyer() || null }).subscribe({
       next: (d) => { this.data.set(d); this.loading.set(false); },
       error: () => this.loading.set(false),
     });

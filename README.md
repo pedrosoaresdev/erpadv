@@ -45,12 +45,26 @@ Documentação: [arquitetura e fluxo de autenticação](docs/ARQUITETURA.md) ·
 
 * **Autenticação**: login, criação do escritório, verificação de e-mail, recuperação de senha,
   convites, bloqueio, revogação de sessões.
-* **Dashboard executivo**: clientes, processos, crescimento, áreas, situações, carteira por advogado,
-  filtro de período.
-* **CRM de clientes**: PF/PJ, CPF/CNPJ criptografado, pesquisa por nome/CPF/CNPJ/telefone/e-mail,
-  inativação, inadimplência, atendimentos, processos vinculados.
-* **Processos**: CNJ validado, partes, juízo, responsável, valor, situação, movimentações,
-  decisões, despachos, linha do tempo, arquivamento, filtros, restrição criminal/sigilosa.
+* **Dashboard executivo**: clientes (ativos/inativos/novos), processos (ativos, suspensos, encerrados, arquivados,
+  aguardando movimentação), prazos de hoje/3/7/15 dias e vencidos, audiências e agenda, contratos, honorários,
+  despesas, faturamento, inadimplência e rentabilidade; gráficos por área, tribunal, situação, origem dos clientes,
+  prazos cumpridos × não cumpridos e desempenho da equipe; filtro por período e por advogado, comparação com o
+  período anterior, exportação PDF/Excel e atalhos de cadastro.
+* **Navegação mobile**: barra inferior com atalhos, menu completo em gaveta, formulários em tela cheia e tabelas
+  em cartões no celular; menu lateral final com os módulos das próximas fases sinalizados (F2–F6).
+* **Pesquisa global**: clientes, CPF/CNPJ, processos, nº CNJ, advogados, documentos, contratos, prazos,
+  audiências, tarefas e movimentações, agrupados por categoria e filtrados pelas permissões.
+* **Central de notificações**: prioridade, categorias, pesquisa, marcar como lida e acesso ao registro.
+* **CRM de clientes**: PF/PJ (nacionalidade, inscrições estadual/municipal, representante legal, pessoas de
+  contato, origem), CPF/CNPJ criptografado, pesquisa por nome/CPF/CNPJ/telefone/e-mail, aviso de duplicidade,
+  arquivamento e exclusão conforme vínculos, clientes sem movimentação recente, ficha cadastral PDF/Excel e
+  impressão, histórico de alterações, exportação, seleção múltipla e ações em lote, atendimentos, processos vinculados.
+* **Processos**: CNJ validado, polos ativo/passivo, instância, juízo, assuntos secundários, justiça gratuita,
+  segredo de justiça, fase processual, OAB do responsável e histórico de responsáveis; movimentações com
+  destaque das importantes (sentença, recurso, suspensão e trânsito atualizam situação/fase); página em 12 abas
+  (resumo, partes, movimentações, prazos, audiências, documentos, tarefas, financeiro, contratos, histórico,
+  observações, integrações judiciais); duplicar, arquivar, excluir arquivado sem vínculos, relatório completo
+  PDF/Excel, impressão e exportação da lista.
 * **Prazos**: contagem sugerida em dias úteis (CPC, arts. 219, 220 e 224 — feriados nacionais e
   móveis, recesso de 20/12 a 20/01) ou corridos com prorrogação, feriados locais e suspensões por
   tribunal, validação obrigatória pelo advogado responsável, indicadores (hoje, urgentes, futuros,
@@ -122,7 +136,7 @@ cd frontend && npm install && npm start                  # http://localhost:4200
 
 | Suíte | Comando | O que cobre |
 |---|---|---|
-| Backend unitário + segurança | `cd backend && mvn test` | CPF/CNPJ/CNJ, criptografia, RBAC, cadeia de auditoria, serviço de clientes, contagem de prazos (feriados, recesso, suspensões), política de alertas, DRE, validação de arquivos, CSV, valor por extenso, minuta, exportação PDF/DOCX, filtro JWT (401/403, bloqueio, revogação, isolamento, validação) |
-| Backend ponta a ponta | `cd firebase && npm run test:backend-e2e` | Painel master → escritório com administrador → cargo personalizado → integrante com senha → quadros (WIP, automação, menções, indicadores) → CRM (funil, conversão) → limite de usuários → suspensão; e o fluxo: cadastro → escritório → clientes → processos → isolamento → dashboard → auditoria → calendário forense → prazos (validação, alertas idempotentes) → agenda (lembretes) → financeiro (parcelas, inadimplência no CRM, baixa, comprovante no Storage, DRE, CSV, escopo pessoal) → documentos (versões, acessos, arquivamento) → contratos (minuta, PDF/DOCX, ativação, êxito, etapas, assinado, cancelamento) → convite/bloqueio, com Auth e Firestore reais no emulador |
+| Backend unitário + segurança | `cd backend && mvn test` | relatórios PDF/Excel (injeção de fórmulas), agrupamentos do dashboard, pesquisa sem acentos, CPF/CNPJ/CNJ, criptografia, RBAC, cadeia de auditoria, serviço de clientes, contagem de prazos (feriados, recesso, suspensões), política de alertas, DRE, validação de arquivos, CSV, valor por extenso, minuta, exportação PDF/DOCX, filtro JWT (401/403, bloqueio, revogação, isolamento, validação) |
+| Backend ponta a ponta | `cd firebase && npm run test:backend-e2e` | Fase 1 (cliente PJ completo, duplicidade, ficha, exclusão com vínculos, processo com sentença/recurso, abas, relatório, duplicar/excluir, dashboard por advogado e exportação, pesquisa global); painel master → escritório com administrador → cargo personalizado → integrante com senha → quadros (WIP, automação, menções, indicadores) → CRM (funil, conversão) → limite de usuários → suspensão; e o fluxo: cadastro → escritório → clientes → processos → isolamento → dashboard → auditoria → calendário forense → prazos (validação, alertas idempotentes) → agenda (lembretes) → financeiro (parcelas, inadimplência no CRM, baixa, comprovante no Storage, DRE, CSV, escopo pessoal) → documentos (versões, acessos, arquivamento) → contratos (minuta, PDF/DOCX, ativação, êxito, etapas, assinado, cancelamento) → convite/bloqueio, com Auth e Firestore reais no emulador |
 | Security Rules | `cd firebase && npm run test:rules` | Perfis, isolamento, auditoria imutável, notificações, Storage |
 | Frontend | `cd frontend && npm test -- --watch=false --browsers=ChromeHeadless` | Validadores, pipes, guards, interceptor, formulário de cliente, utilitários da agenda, de prazos e do financeiro |

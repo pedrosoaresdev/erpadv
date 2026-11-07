@@ -1,3 +1,4 @@
+<button type="button" class="skip-link" (click)="skipToContent()">Pular para o conteúdo</button>
 <div class="shell" [class.collapsed]="collapsed() && !isMobile()" [class.mobile]="isMobile()" [class.mobile-open]="mobileOpen()">
   <aside class="sidebar" aria-label="Menu principal">
     <div class="brand">
@@ -15,14 +16,15 @@
         <div class="nav-section">{{ section.title }}</div>
         @for (item of section.items; track item.label) {
           @if (item.route) {
-            <a class="nav-item" [routerLink]="item.route" routerLinkActive="active"
+            <a class="nav-item" [routerLink]="item.route" [queryParams]="item.queryParams" routerLinkActive="active"
+               [routerLinkActiveOptions]="{ paths: 'subset', queryParams: item.queryParams ? 'subset' : 'ignored', fragment: 'ignored', matrixParams: 'ignored' }"
                [matTooltip]="item.label" [matTooltipDisabled]="!collapsed() || isMobile()" matTooltipPosition="right">
               <mat-icon>{{ item.icon }}</mat-icon><span class="label">{{ item.label }}</span>
             </a>
           } @else {
-            <div class="nav-item disabled" [matTooltip]="stageTooltip(item)" matTooltipPosition="right" aria-disabled="true">
+            <div class="nav-item disabled" [matTooltip]="phaseTooltip(item)" matTooltipPosition="right" aria-disabled="true">
               <mat-icon>{{ item.icon }}</mat-icon><span class="label">{{ item.label }}</span>
-              <span class="stage">E{{ item.stage }}</span>
+              <span class="stage">F{{ item.phase }}</span>
             </div>
           }
         }
@@ -99,8 +101,17 @@
       </mat-menu>
     </header>
 
-    <main class="content">
+    <main class="content" id="conteudo" tabindex="-1">
       <router-outlet />
     </main>
+
+    @if (isMobile()) {
+      <nav class="bottom-nav" aria-label="Navegação principal">
+        @for (s of shortcuts(); track s.route) {
+          <a [routerLink]="s.route" routerLinkActive="active"><mat-icon>{{ s.icon }}</mat-icon><span>{{ s.label }}</span></a>
+        }
+        <button type="button" (click)="mobileOpen.set(true)" aria-label="Abrir menu completo"><mat-icon>menu</mat-icon><span>Menu</span></button>
+      </nav>
+    }
   </div>
 </div>
