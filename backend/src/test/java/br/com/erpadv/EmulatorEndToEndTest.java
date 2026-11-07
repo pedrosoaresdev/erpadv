@@ -21,6 +21,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -40,6 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.jobs.deadline-alerts-cron=0 0 0 1 1 *",
         "app.jobs.appointment-reminders-ms=86400000",
         "app.jobs.delinquency-cron=0 0 0 1 1 *",
+        "app.jobs.contract-expiry-cron=0 0 0 1 1 *",
         "app.security.profile-cache-seconds=1"
 })
 @AutoConfigureMockMvc
@@ -315,7 +317,124 @@ class EmulatorEndToEndTest {
         mvc.perform(get("/api/finance/dashboard").header("Authorization", "Bearer " + tokenA))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.scope").value("ESCRITORIO"));
 
-        // 9. Convite de funcionário (estagiário) e bloqueio
+        // 9. Etapa 11 — repositório documental
+        byte[] petition = "%PDF-1.4\n% peticao inicial\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        JsonNode doc = body(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/documents")
+                        .file(new org.springframework.mock.web.MockMultipartFile("file", "peticao inicial.pdf", "application/pdf", petition))
+                        .file(new org.springframework.mock.web.MockMultipartFile("meta", "", "application/json",
+                                JSON.writeValueAsBytes(Map.of("title", "Petição inicial", "category", "PETICAO", "caseId", caseId))))
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isCreated()).andReturn());
+        String docId = doc.get("id").asText();
+        assertThat(doc.get("clientName").asText()).isEqualTo("João da Conceição");
+        assertThat(doc.get("currentVersion").asInt()).isEqualTo(1);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/documents/" + docId + "/versions")
+                        .file(new org.springframework.mock.web.MockMultipartFile("file", "peticao v2.pdf", "application/pdf",
+                                "%PDF-1.4\n% versao 2\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII)))
+                        .param("note", "Ajuste no pedido")
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.currentVersion").value(2));
+        MvcResult v1 = mvc.perform(get("/api/documents/" + docId + "/content").param("version", "1").param("download", "true")
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(v1.getResponse().getContentAsByteArray()).isEqualTo(petition);
+        mvc.perform(get("/api/documents/" + docId + "/versions").header("Authorization", "Bearer " + tokenA))
+                .andExpect(jsonPath("$.length()").value(2));
+        mvc.perform(get("/api/documents/" + docId + "/access-log").header("Authorization", "Bearer " + tokenA))
+                .andExpect(jsonPath("$.items[0].action").value("DOWNLOAD"));
+        mvc.perform(get("/api/documents").param("search", "peticao").header("Authorization", "Bearer " + tokenA))
+                .andExpect(jsonPath("$.items[0].id").value(docId));
+        mvc.perform(get("/api/documents/" + docId).header("Authorization", "Bearer " + tokenB))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/api/documents/" + docId + "/archive").header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.archived").value(true));
+        mvc.perform(get("/api/documents").param("caseId", caseId).header("Authorization", "Bearer " + tokenA))
+                .andExpect(jsonPath("$.items.length()").value(0));
+
+        // 10. Etapa 11 — contratos e honorários
+        java.util.Map<String, Object> contractReq = new java.util.HashMap<>(Map.of(
+                "title", "Ação revisional bancária", "type", "HONORARIOS", "clientId", clientId, "caseId", caseId,
+                "responsibleUid", uidA, "object", "Ajuizamento e acompanhamento de ação revisional",
+                "startDate", today.toString(), "feeModel", "PARCELADO", "amountCents", 900000));
+        contractReq.put("installments", 3);
+        contractReq.put("firstDueDate", today.plusDays(10).toString());
+        contractReq.put("successPercentBp", 2000);
+        contractReq.put("endDate", today.plusDays(20).toString());
+        JsonNode contract = body(mvc.perform(post("/api/contracts").header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON).content(JSON.writeValueAsString(contractReq)))
+                .andExpect(status().isCreated()).andReturn());
+        String contractId = contract.get("id").asText();
+        assertThat(contract.get("number").asText()).matches("CT-\\d{4}-0001");
+        assertThat(contract.get("status").asText()).isEqualTo("RASCUNHO");
+
+        JsonNode generated = body(mvc.perform(post("/api/contracts/" + contractId + "/generate").header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"templateId\":\"system:honorarios\"}"))
+                .andExpect(status().isOk()).andReturn());
+        assertThat(generated.get("body").asText()).contains("João da Conceição").contains("529.982.247-25")
+                .contains("nove mil reais").contains("20%");
+        MvcResult pdfExport = mvc.perform(get("/api/contracts/" + contractId + "/export").param("format", "pdf")
+                .header("Authorization", "Bearer " + tokenA)).andExpect(status().isOk()).andReturn();
+        assertThat(new String(pdfExport.getResponse().getContentAsByteArray(), 0, 5, java.nio.charset.StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
+        MvcResult docxExport = mvc.perform(get("/api/contracts/" + contractId + "/export").param("format", "docx")
+                .header("Authorization", "Bearer " + tokenA)).andExpect(status().isOk()).andReturn();
+        assertThat(docxExport.getResponse().getContentAsByteArray()[0]).isEqualTo((byte) 'P');
+        JsonNode stored = body(mvc.perform(post("/api/contracts/" + contractId + "/export-to-documents").param("format", "docx")
+                .header("Authorization", "Bearer " + tokenA)).andExpect(status().isOk()).andReturn());
+        mvc.perform(get("/api/documents/" + stored.get("documentId").asText()).header("Authorization", "Bearer " + tokenA))
+                .andExpect(jsonPath("$.category").value("CONTRATO"))
+                .andExpect(jsonPath("$.contractId").value(contractId));
+
+        mvc.perform(post("/api/contracts/" + contractId + "/activate").header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ATIVO"));
+        mvc.perform(get("/api/finance/transactions").param("contractId", contractId).header("Authorization", "Bearer " + tokenA))
+                .andExpect(jsonPath("$.items.length()").value(3))
+                .andExpect(jsonPath("$.items[0].amountCents").value(300000));
+        contractReq.put("amountCents", 950000);
+        mvc.perform(put("/api/contracts/" + contractId).header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON).content(JSON.writeValueAsString(contractReq)))
+                .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("FEES_LOCKED"));
+        mvc.perform(post("/api/contracts/" + contractId + "/success").header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(JSON.writeValueAsString(Map.of("obtainedCents", 5000000, "dueDate", today.plusDays(30).toString()))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.successBilled").value(true));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/contracts/" + contractId + "/signed")
+                        .file(new org.springframework.mock.web.MockMultipartFile("file", "contrato assinado.pdf", "application/pdf",
+                                "%PDF-1.4\n% assinado\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII)))
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.signedDocumentId").isNotEmpty());
+        assertThat(jobs.sendContractExpiryAlerts(today)).isEqualTo(1);
+        assertThat(jobs.sendContractExpiryAlerts(today)).isZero();
+        mvc.perform(post("/api/contracts/" + contractId + "/cancel").header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Cliente desistiu\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELADO"));
+        mvc.perform(get("/api/finance/transactions").param("contractId", contractId).param("view", "ABERTOS")
+                .header("Authorization", "Bearer " + tokenA)).andExpect(jsonPath("$.items.length()").value(0));
+        mvc.perform(get("/api/contracts/" + contractId + "/history").header("Authorization", "Bearer " + tokenA))
+                .andExpect(jsonPath("$.items.length()").value(org.hamcrest.Matchers.greaterThanOrEqualTo(6)));
+        mvc.perform(get("/api/contracts/" + contractId).header("Authorization", "Bearer " + tokenB))
+                .andExpect(status().isNotFound());
+
+        // etapas
+        java.util.Map<String, Object> stagesReq = new java.util.HashMap<>(contractReq);
+        stagesReq.put("feeModel", "ETAPAS");
+        stagesReq.remove("amountCents");
+        stagesReq.remove("installments");
+        stagesReq.remove("successPercentBp");
+        stagesReq.remove("endDate");
+        stagesReq.put("stages", java.util.List.of(Map.of("description", "Petição inicial", "amountCents", 200000),
+                Map.of("description", "Sentença", "amountCents", 300000)));
+        JsonNode staged = body(mvc.perform(post("/api/contracts").header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON).content(JSON.writeValueAsString(stagesReq)))
+                .andExpect(status().isCreated()).andReturn());
+        String stagedId = staged.get("id").asText();
+        mvc.perform(post("/api/contracts/" + stagedId + "/activate").header("Authorization", "Bearer " + tokenA)).andExpect(status().isOk());
+        mvc.perform(post("/api/contracts/" + stagedId + "/stages/" + staged.get("stages").get(0).get("id").asText() + "/bill")
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.stages[0].billed").value(true));
+        mvc.perform(get("/api/finance/transactions").param("contractId", stagedId).header("Authorization", "Bearer " + tokenA))
+                .andExpect(jsonPath("$.items.length()").value(1)).andExpect(jsonPath("$.items[0].amountCents").value(200000));
+
+        // 11. Convite de funcionário (estagiário) e bloqueio
         JsonNode invite = body(mvc.perform(post("/api/employees").header("Authorization", "Bearer " + tokenA)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"estagiario-" + UUID.randomUUID() + "@escritorio-a.test\","

@@ -240,6 +240,59 @@ public class FinanceService {
         return TransactionResponse.of(t, today());
     }
 
+    // ------------------------------------------------------------------ integração com contratos
+
+    /**
+     * Gera contas a receber a partir de um contrato (regra de negócio do contrato: não exige
+     * FINANCE_WRITE de quem ativa o contrato). Registrado na auditoria.
+     */
+    public List<FinancialTransaction> createForContract(AuthenticatedUser actor, List<FinancialTransaction> items) {
+        String officeId = actor.requireOffice();
+        Instant now = Instant.now();
+        for (FinancialTransaction t : items) {
+            t.setDirection(FinanceDirection.RECEITA);
+            t.setScope(FinanceScope.ESCRITORIO);
+            t.setStatus(TransactionStatus.ABERTO);
+            t.setCreatedAt(now);
+            t.setUpdatedAt(now);
+            t.setCreatedBy(actor.uid());
+            t.setUpdatedBy(actor.uid());
+            if (t.getCounterparty() == null) {
+                t.setCounterparty(t.getClientName());
+            }
+        }
+        if (items.isEmpty()) {
+            return items;
+        }
+        transactions.saveAll(officeId, items);
+        long total = items.stream().mapToLong(FinancialTransaction::getAmountCents).sum();
+        audit.record(actor, "FINANCE_CREATED", "finance", items.get(0).getId(),
+                "Honorários gerados pelo contrato: " + items.size() + " lançamento(s), total " + money(total),
+                Map.of("contractId", items.get(0).getContractId() == null ? "" : items.get(0).getContractId()));
+        refreshClientDefaulting(officeId, items.get(0).getClientId(), FinanceScope.ESCRITORIO);
+        return items;
+    }
+
+    /** Cancela as contas em aberto de um contrato (cancelamento/encerramento antecipado). */
+    public int cancelOpenByContract(AuthenticatedUser actor, String contractId, String reason) {
+        String officeId = actor.requireOffice();
+        List<FinancialTransaction> open = transactions.list(transactions.collection(officeId)
+                .whereEqualTo("contractId", contractId)
+                .whereEqualTo("status", TransactionStatus.ABERTO.name()), 500);
+        for (FinancialTransaction t : open) {
+            t.setStatus(TransactionStatus.CANCELADO);
+            t.setCanceledReason(reason);
+            touch(actor, t);
+        }
+        if (!open.isEmpty()) {
+            transactions.saveAll(officeId, open);
+            audit.record(actor, "FINANCE_CANCELED", "finance", open.get(0).getId(),
+                    open.size() + " lançamento(s) cancelado(s) com o contrato", Map.of("contractId", contractId, "reason", reason));
+            refreshClientDefaulting(officeId, open.get(0).getClientId(), FinanceScope.ESCRITORIO);
+        }
+        return open.size();
+    }
+
     // ------------------------------------------------------------------ comprovantes
 
     public TransactionResponse attachReceipt(AuthenticatedUser user, String id, byte[] bytes, String originalName) {
@@ -345,6 +398,9 @@ public class FinanceService {
         }
         if (filter.clientId() != null && !filter.clientId().isBlank()) {
             q = q.whereEqualTo("clientId", filter.clientId());
+        }
+        if (filter.contractId() != null && !filter.contractId().isBlank()) {
+            q = q.whereEqualTo("contractId", filter.contractId());
         }
         LocalDate from = filter.from();
         LocalDate to = filter.to();

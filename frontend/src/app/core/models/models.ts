@@ -261,6 +261,7 @@ export interface Dashboard {
   productivity: NamedCount[];
   deadlines: { dueToday: number; urgent: number; overdue: number; upcoming: number; completedInPeriod: number; unvalidated: number };
   hearings: { next30Days: number; byMonth: MonthPoint[] };
+  contracts: { active: number; expiring30Days: number; drafts: number };
   pendingModules: Record<string, string>;
 }
 

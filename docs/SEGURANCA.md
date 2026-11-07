@@ -19,7 +19,9 @@
 | Validação | Bean Validation em todos os DTOs + validação de CPF/CNPJ/CNJ no front e no back; erros padronizados (RFC 7807) sem stack trace. |
 | Credenciais | Nenhuma credencial administrativa no front ou nas imagens; service account via Docker secret; chaves de desenvolvimento recusadas com `APP_PRODUCTION=true`. |
 | Logs | JSON estruturado com `traceId`, `uid`, `officeId`; logger `AUDIT` dedicado. |
-| Arquivos | Upload só via backend; tipo detectado pela assinatura binária (PDF/PNG/JPEG), limite de 10 MB, nome sanitizado, SHA-256 registrado; download autenticado com `no-store`/`nosniff` e auditado. |
+| Arquivos | Upload só via backend; tipo detectado pela assinatura binária (PDF/DOCX/PNG/JPEG), limites de 10 MB (comprovantes) e 25 MB (documentos), nome sanitizado, SHA-256 por versão; conteúdo servido autenticado com `no-store`/`nosniff`/CSP `sandbox`; cada visualização e download registrados por documento e na auditoria; versões nunca apagadas (arquivamento em vez de exclusão). |
+| Sigilo documental | Categorias Inquéritos/Sigilosos sempre sigilosas; documentos sigilosos exigem `DOCUMENTS_CONFIDENTIAL`, documentos de processo criminal exigem `CRIMINAL_READ`; sigilosos nunca liberados ao portal. |
+| Contratos | Honorários de contrato ativo bloqueados para alteração; CPF/CNPJ na minuta apenas para quem tem acesso a dados sensíveis. |
 | Separação patrimonial | Lançamentos pessoais de sócios visíveis apenas ao próprio sócio e excluídos de relatórios do escritório. |
 | Exportações | CSV com neutralização de injeção de fórmulas (`=`, `+`, `-`, `@`) e registro na auditoria. |
 

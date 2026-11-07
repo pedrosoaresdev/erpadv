@@ -29,8 +29,8 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'Gestão',
     items: [
       { label: 'Financeiro', icon: 'account_balance_wallet', route: '/financeiro', permission: 'FINANCE_READ' },
-      { label: 'Contratos', icon: 'handshake', permission: 'CONTRACTS_READ', stage: 11 },
-      { label: 'Documentos', icon: 'folder_open', permission: 'DOCUMENTS_READ', stage: 11 },
+      { label: 'Contratos', icon: 'handshake', route: '/contratos', permission: 'CONTRACTS_READ' },
+      { label: 'Documentos', icon: 'folder_open', route: '/documentos', permission: 'DOCUMENTS_READ' },
       { label: 'Criminal', icon: 'policy', permission: 'CRIMINAL_READ', stage: 12 },
       { label: 'IA Jurídica', icon: 'auto_awesome', permission: 'AI_USE', stage: 13 },
       { label: 'Comunicação', icon: 'forum', permission: 'MESSAGES_USE', stage: 14 },

@@ -65,6 +65,8 @@ const iso = (d: Date) =>
             [hint]="d.deadlines.unvalidated + ' aguardando validação · ' + d.deadlines.completedInPeriod + ' cumpridos no período'" /></a>
           <a class="kpi-link" routerLink="/agenda"><app-stat-card label="Audiências (30 dias)" [value]="d.hearings.next30Days" icon="gavel"
             hint="Próximas audiências agendadas" /></a>
+          <a class="kpi-link" routerLink="/contratos"><app-stat-card label="Contratos ativos" [value]="d.contracts.active" icon="handshake"
+            [hint]="d.contracts.expiring30Days + ' terminando em 30 dias · ' + d.contracts.drafts + ' rascunho(s)'" [tone]="d.contracts.expiring30Days ? 'warning' : ''" /></a>
         </section>
 
         @if (finance(); as f) {

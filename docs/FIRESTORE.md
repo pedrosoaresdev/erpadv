@@ -32,12 +32,13 @@ auditoria). Campos comuns a todas as entidades:
 | `deadlines` | prazos | `caseId`, `caseNumber`, `clientId`, `clientName`, `description`, `type`, `startDate`, `dueDate`, `days`, `countingMode` (`UTEIS`/`CORRIDOS`/`MANUAL`), `court`, `responsibleUid`, `priority`, `status` (`PENDENTE`/`CONCLUIDO`/`CANCELADO`; *vencido* é derivado), `validated`, `validatedBy`, `alertsSent[]`, `restricted` |
 | `court_calendar` | feriados locais e suspensões | `startDate`, `endDate`, `court` (nulo = todos), `description`, `kind` (`FERIADO`/`SUSPENSAO`) |
 | `appointments` | agenda (audiências = `type: AUDIENCIA`) | `type`, `title`, `start`, `end` (epoch ms), `allDay`, `location`, `meetingUrl`, `responsibleUids[]`, `clientId`, `caseId`, `reminders[]` (minutos), `remindersSent[]`, `restricted` |
-| `contracts` | contratos | `clientId`, `caseIds[]`, `type`, `status`, `templateId`, `signedDocumentId`, `history[]` |
-| `fees` | honorários | `contractId`, `clientId`, `kind` (`FIXO`/`PARCELADO`/`ETAPAS`/`EXITO`), `amountCents`, `installments[]` |
+| `contracts` | contratos | `number` (CT-AAAA-NNNN), `title`, `type`, `status` (`RASCUNHO`/`ATIVO`/`ENCERRADO`/`CANCELADO`), `clientId`, `caseId`, `responsibleUid`, `object`, `startDate`, `endDate`, `feeModel` (`FIXO`/`PARCELADO`/`ETAPAS`/`EXITO`/`MENSAL`), `amountCents`, `installments`, `monthlyCents`, `months`, `stages[]`, `successPercentBp`, `body` (minuta), `templateId`, `signedDocumentId`, `expiryAlertsSent[]` — histórico via `audit_logs` |
+| `contract_templates` | modelos com campos `{{grupo.campo}}` | `name`, `type`, `body`, `active` (modelos `system:*` vêm do código) |
+| `counters/contracts-AAAA` | numeração sequencial | `value` |
 | `financial_transactions` | lançamentos (receber/pagar) | `direction` (`RECEITA`/`DESPESA`), `category`, `scope` (`ESCRITORIO`/`PESSOAL`), `ownerUid` (pessoal), `description`, `amountCents`, `dueDate`, `status` (`ABERTO`/`PAGO`/`CANCELADO`; *atrasado* é derivado), `paidDate`, `paidAmountCents`, `paymentMethod`, `clientId`, `caseId`, `counterparty`, `groupId`/`installmentNumber`/`installmentCount`/`recurrent`, `receiptPath`/`receiptSha256` |
-| `documents` | metadados de arquivos | `name`, `category`, `clientId`, `caseId`, `storagePath`, `contentType`, `size`, `sha256`, `currentVersion`, `confidential`, `sharedWithClient`, `uploadedBy` |
+| `documents` | metadados de arquivos | `title`, `category`, `clientId`, `caseId`, `contractId`, `confidential`, `restricted`, `sharedWithClient`, `archived`, `currentVersion`, `fileName`, `contentType`, `size`, `sha256`, `storagePath`, `uploadedBy`, `searchTokens[]` |
 | `document_versions` | versões | `documentId`, `version`, `storagePath`, `sha256`, `uploadedBy` |
-| `document_access_logs` | quem leu/baixou | `documentId`, `uid`, `action`, `at`, `ip` |
+| `document_access_logs` | quem enviou/visualizou/baixou/editou | `documentId`, `version`, `uid`, `userName`, `action`, `ip`, `createdAt` |
 | `tasks` | tarefas internas | `title`, `assigneeUid`, `dueDate`, `status`, `caseId` |
 | `notifications` | notificações por usuário | `recipientUid`, `type`, `title`, `body`, `link`, `read` |
 | `messages` | comunicação interna / portal | `threadId`, `fromUid`, `toUids[]`, `body`, `clientVisible` |

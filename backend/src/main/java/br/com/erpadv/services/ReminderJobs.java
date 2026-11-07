@@ -114,6 +114,49 @@ public class ReminderJobs {
         return count;
     }
 
+    @Scheduled(cron = "${app.jobs.contract-expiry-cron:0 15 7 * * *}", zone = "America/Sao_Paulo")
+    public void contractExpiryJob() {
+        if (!lock.tryAcquire("contract-expiry", Duration.ofMinutes(10))) {
+            return;
+        }
+        try {
+            sendContractExpiryAlerts(DeadlineService.today());
+        } catch (RuntimeException e) {
+            log.error("Falha no job de vencimento de contratos", e);
+        } finally {
+            lock.release("contract-expiry");
+        }
+    }
+
+    /** Avisa o advogado responsável 30, 7 e 1 dia antes e no dia do término do contrato. */
+    public int sendContractExpiryAlerts(LocalDate today) {
+        List<Integer> thresholds = List.of(30, 7, 1, 0);
+        List<QueryDocumentSnapshot> docs = Futures.await(db.collectionGroup("contracts")
+                .whereEqualTo("status", "ATIVO")
+                .whereGreaterThanOrEqualTo("endDate", today.toString())
+                .whereLessThanOrEqualTo("endDate", today.plusDays(30).toString())
+                .limit(BATCH).get()).getDocuments();
+        int count = 0;
+        for (QueryDocumentSnapshot doc : docs) {
+            br.com.erpadv.models.Contract c = mapper.fromSnapshot(doc, br.com.erpadv.models.Contract.class);
+            if (c.getOfficeId() == null || c.getResponsibleUid() == null || c.getEndDate() == null) {
+                continue;
+            }
+            long daysLeft = ChronoUnit.DAYS.between(today, c.getEndDate());
+            var decision = AlertPolicy.evaluate(daysLeft, c.getExpiryAlertsSent(), thresholds);
+            if (decision.isEmpty()) {
+                continue;
+            }
+            notifications.notify(c.getOfficeId(), c.getResponsibleUid(), "CONTRACT_EXPIRY",
+                    "Contrato " + c.getNumber() + " " + AlertPolicy.describe(decision.get().daysLeft()).replace("vence", "termina"),
+                    c.getTitle() + " · " + c.getClientName() + " — avalie renovação ou encerramento", "/contratos/" + c.getId());
+            Futures.await(doc.getReference().update("expiryAlertsSent",
+                    FieldValue.arrayUnion(decision.get().markAsSent().toArray())));
+            count++;
+        }
+        return count;
+    }
+
     /** Envia lembretes de compromissos que começam nas próximas 7 dias. */
     public int sendAppointmentReminders(Instant now) {
         List<QueryDocumentSnapshot> docs = Futures.await(db.collectionGroup("appointments")

@@ -21,6 +21,7 @@ public final class DashboardDtos {
             List<NamedCount> productivity,
             DeadlineStats deadlines,
             HearingStats hearings,
+            ContractStats contracts,
             /** Indicadores que dependem de módulos ainda não implantados → etapa prevista. */
             Map<String, String> pendingModules) {
     }
@@ -31,6 +32,9 @@ public final class DashboardDtos {
 
     /** Audiências: próximas 30 dias e distribuição mensal no período. */
     public record HearingStats(long next30Days, List<MonthPoint> byMonth) {
+    }
+
+    public record ContractStats(long active, long expiring30Days, long drafts) {
     }
 
     public record ClientStats(long total, long active, long inactive, long defaulting, long newInPeriod) {

@@ -9,12 +9,12 @@ Legenda: ✅ concluída · 🟡 parcial · ⏳ pendente
 | 3 | Backend Java: Firebase Admin, segurança, RBAC, auditoria encadeada, criptografia, paginação, tratamento de erros, logs | ✅ |
 | 4 | Frontend Angular: layout premium, tema claro/escuro, sidebar recolhível, configuração em runtime | ✅ |
 | 5 | Autenticação e permissões: login, cadastro do escritório, recuperação de senha, verificação de e-mail, convites, bloqueio, revogação de sessões | ✅ |
-| 6 | Dashboard executivo (clientes, processos, prazos, audiências e financeiro; contratos entram com a etapa 11) | 🟡 |
+| 6 | Dashboard executivo (clientes, processos, prazos, audiências, financeiro e contratos) | ✅ |
 | 7 | CRM de clientes (cadastro PF/PJ, pesquisa, inativação, atendimentos, página do cliente) | ✅ |
 | 8 | Gestão processual (cadastro, arquivamento, movimentações, decisões, despachos, linha do tempo, filtros) | ✅ |
 | 9 | Prazos (contagem CPC com feriados, recesso e suspensões; validação pelo advogado; alertas 10/5/3/1/0 dias via notificação e FCM) e agenda (dia/semana/mês, lembretes) | ✅ |
 | 10 | Financeiro (receber/pagar, parcelamentos, recorrências, baixa com comprovante, fluxo de caixa, projeções, DRE gerencial, inadimplência integrada ao CRM, CSV, finanças pessoais dos sócios) | ✅ |
-| 11 | Contratos/honorários e gestão documental (Storage, versões, log de acesso, PDF/DOCX) | ⏳ |
+| 11 | Contratos/honorários (fixo, parcelado, etapas, êxito, mensal → financeiro), modelos com campos dinâmicos, minuta PDF/DOCX, contrato assinado, histórico; gestão documental (Storage, versões, sigilo, histórico de acesso, pré-visualização) | ✅ |
 | 12 | Departamento criminal (custodiados, inquéritos, cautelares) | ⏳ |
 | 13 | IA jurídica (6 agentes via backend, regras de não-alucinação, revisão humana) | ⏳ |
 | 14 | Portal do cliente | ⏳ |
@@ -24,7 +24,9 @@ Legenda: ✅ concluída · 🟡 parcial · ⏳ pendente
 
 ## O que falta (registrado ao fim desta entrega)
 
-* Módulos das etapas 11–14 (rotas aparecem desabilitadas na sidebar com a etapa indicada).
+* **Próxima entrega (pedido do usuário):** painel do desenvolvedor (master) para criar escritórios e o advogado administrador (OAB, nome, CPF, senha); cargos personalizados com permissões criados pelo dono do escritório; quadros Kanban avançados (estilo Trello) e CRM comercial (funil de captação).
+* Módulos das etapas 12–14 (rotas aparecem desabilitadas na sidebar com a etapa indicada).
+* Assinatura eletrônica com certificado ICP-Brasil e antivírus nos uploads.
 * Financeiro: DRE em regime de competência, conciliação bancária (OFX) e emissão de boletos/Pix dependem de integração com instituição financeira.
 * Exportação PDF/Excel dos relatórios financeiros (CSV já disponível) entra com a central de relatórios.
 * Calendários forenses estaduais/municipais pré-carregados (hoje cadastrados pelo escritório em *Prazos → Calendário forense*).

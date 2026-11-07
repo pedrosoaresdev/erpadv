@@ -75,6 +75,7 @@ public final class FinanceDtos {
             String clientName,
             String caseId,
             String caseNumber,
+            String contractId,
             String counterparty,
             String documentNumber,
             String notes,
@@ -106,7 +107,7 @@ public final class FinanceDtos {
                     t.getCategory() == null ? null : t.getCategory().label(), t.getScope(), t.getDescription(),
                     t.getAmountCents(), t.getDueDate(), t.getStatus(), situation, overdue, t.getPaidDate(),
                     t.getPaidAmountCents(), t.getPaymentMethod(), t.getClientId(), t.getClientName(), t.getCaseId(),
-                    t.getCaseNumber(), t.getCounterparty(), t.getDocumentNumber(), t.getNotes(), t.getGroupId(),
+                    t.getCaseNumber(), t.getContractId(), t.getCounterparty(), t.getDocumentNumber(), t.getNotes(), t.getGroupId(),
                     t.getInstallmentNumber(), t.getInstallmentCount(), t.isRecurrent(), t.getCanceledReason(),
                     t.getReceiptPath() != null, t.getReceiptName(), t.getCreatedAt());
         }
@@ -119,7 +120,13 @@ public final class FinanceDtos {
             FinanceCategory category,
             String clientId,
             LocalDate from,
-            LocalDate to) {
+            LocalDate to,
+            String contractId) {
+
+        public TransactionFilter(FinanceScope scope, FinanceDirection direction, View view, FinanceCategory category,
+                                 String clientId, LocalDate from, LocalDate to) {
+            this(scope, direction, view, category, clientId, from, to, null);
+        }
     }
 
     // ------------------------------------------------------------------ relatórios

@@ -2,6 +2,7 @@ package br.com.erpadv.services;
 
 import br.com.erpadv.dto.DashboardDtos.CaseStats;
 import br.com.erpadv.dto.DashboardDtos.ClientStats;
+import br.com.erpadv.dto.DashboardDtos.ContractStats;
 import br.com.erpadv.dto.DashboardDtos.DeadlineStats;
 import br.com.erpadv.dto.DashboardDtos.HearingStats;
 import br.com.erpadv.dto.DeadlineDtos;
@@ -139,6 +140,11 @@ public class DashboardService {
         f.put("dl.completed", dl.whereEqualTo("status", DeadlineStatus.CONCLUIDO.name())
                 .whereGreaterThanOrEqualTo("dueDate", start.toString())
                 .whereLessThanOrEqualTo("dueDate", end.toString()).count().get());
+        CollectionReference ct = cs.getParent().collection("contracts");
+        f.put("ct.active", ct.whereEqualTo("status", "ATIVO").count().get());
+        f.put("ct.draft", ct.whereEqualTo("status", "RASCUNHO").count().get());
+        f.put("ct.expiring", ct.whereEqualTo("status", "ATIVO").whereGreaterThanOrEqualTo("endDate", t)
+                .whereLessThanOrEqualTo("endDate", today.plusDays(30).toString()).count().get());
         Query hearings = ap.whereEqualTo("type", AppointmentType.AUDIENCIA.name());
         long nowMs = System.currentTimeMillis();
         f.put("hr.next30", hearings.whereGreaterThanOrEqualTo("start", nowMs)
@@ -196,10 +202,10 @@ public class DashboardService {
                 months.stream().map(m -> new MonthPoint(m.toString(), v.get("hr.m." + m), null)).toList());
 
         Map<String, String> pendingModules = new LinkedHashMap<>();
-        pendingModules.put("contracts", "Contratos — Etapa 11");
 
         return new DashboardResponse(start, end, clientStats, caseStats, clientGrowth, newCases, byArea, byStatus,
-                productivity, deadlineStats, hearingStats, pendingModules);
+                productivity, deadlineStats, hearingStats,
+                new ContractStats(v.get("ct.active"), v.get("ct.expiring"), v.get("ct.draft")), pendingModules);
     }
 
     private static Query range(CollectionReference col, long fromInclusive, long toExclusive) {

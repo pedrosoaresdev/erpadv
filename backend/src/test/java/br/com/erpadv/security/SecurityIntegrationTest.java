@@ -75,6 +75,10 @@ class SecurityIntegrationTest {
     br.com.erpadv.services.FinanceService financeService;
     @MockitoBean
     br.com.erpadv.services.FinanceReportService financeReportService;
+    @MockitoBean
+    br.com.erpadv.services.DocumentService documentService;
+    @MockitoBean
+    br.com.erpadv.services.ContractService contractService;
 
     private void token(String token, String uid, String officeId, Role role, long iatSeconds) throws Exception {
         FirebaseToken decoded = mock(FirebaseToken.class);
@@ -331,5 +335,41 @@ class SecurityIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fields.amountCents").exists())
                 .andExpect(jsonPath("$.fields.installments").exists());
+    }
+
+    // ------------------------------------------------------------------ Etapa 11: documentos e contratos
+
+    @Test
+    void estagiarioConsultaDocumentosMasNaoEnvia() throws Exception {
+        token("t-est11", "est11", "office1", Role.ESTAGIARIO, now());
+        profile("est11", "office1", Role.ESTAGIARIO, UserStatus.ACTIVE, null);
+        when(documentService.list(any(), any(), any(), anyInt())).thenReturn(new CursorPage<>(List.of(), null));
+        mvc.perform(get("/api/documents").header("Authorization", "Bearer t-est11")).andExpect(status().isOk());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/documents")
+                        .file(new org.springframework.mock.web.MockMultipartFile("file", "a.pdf", "application/pdf", "%PDF-1.4".getBytes()))
+                        .file(new org.springframework.mock.web.MockMultipartFile("meta", "", "application/json",
+                                "{\"title\":\"x\",\"category\":\"PETICAO\"}".getBytes()))
+                        .header("Authorization", "Bearer t-est11"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void financeiroLeContratosMasNaoAltera() throws Exception {
+        token("t-fin12", "fin12", "office1", Role.FINANCEIRO, now());
+        profile("fin12", "office1", Role.FINANCEIRO, UserStatus.ACTIVE, null);
+        when(contractService.list(any(), any(), any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), any(), anyInt()))
+                .thenReturn(new CursorPage<>(List.of(), null));
+        mvc.perform(get("/api/contracts").header("Authorization", "Bearer t-fin12")).andExpect(status().isOk());
+        mvc.perform(post("/api/contracts/abc/activate").header("Authorization", "Bearer t-fin12"))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/documents").header("Authorization", "Bearer t-fin12"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void secretariaNaoAcessaContratos() throws Exception {
+        token("t-sec12", "sec12", "office1", Role.SECRETARIA, now());
+        profile("sec12", "office1", Role.SECRETARIA, UserStatus.ACTIVE, null);
+        mvc.perform(get("/api/contracts").header("Authorization", "Bearer t-sec12")).andExpect(status().isForbidden());
     }
 }

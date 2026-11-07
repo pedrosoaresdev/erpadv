@@ -72,6 +72,7 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
         Role role = Role.parse(claims.get("role"));
         String clientId = claims.get("clientId") instanceof String s ? s : null;
         Set<Permission> permissions = Set.of();
+        String displayName = token.getName();
 
         if (officeId != null && role != null) {
             Optional<UserProfile> profileOpt = profiles.get(token.getUid());
@@ -92,10 +93,13 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
             // O papel vigente é o do perfil (claims podem estar defasados até a renovação do token).
             role = profile.getRole() != null ? profile.getRole() : role;
             permissions = RolePermissions.effective(role, profile.getPermissionsGranted(), profile.getPermissionsRevoked());
+            if (profile.getDisplayName() != null && !profile.getDisplayName().isBlank()) {
+                displayName = profile.getDisplayName();
+            }
         }
 
         AuthenticatedUser user = new AuthenticatedUser(
-                token.getUid(), token.getEmail(), token.getName(), token.isEmailVerified(),
+                token.getUid(), token.getEmail(), displayName, token.isEmailVerified(),
                 officeId, role, clientId, permissions);
 
         List<GrantedAuthority> authorities = new ArrayList<>();

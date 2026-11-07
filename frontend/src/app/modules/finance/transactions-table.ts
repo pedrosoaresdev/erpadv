@@ -157,6 +157,7 @@ export class TransactionsTableComponent {
   readonly direction = input.required<FinanceDirection>();
   readonly scope = input<FinanceScope>('ESCRITORIO');
   readonly clientId = input<string | null>(null);
+  readonly contractId = input<string | null>(null);
   readonly client = input<{ id: string; name: string } | null>(null);
   /** Incrementado pelo pai para forçar recarga (ex.: após lançamento feito em outra aba). */
   readonly refreshKey = input(0);
@@ -195,6 +196,7 @@ export class TransactionsTableComponent {
       this.from();
       this.to();
       this.refreshKey();
+      this.contractId();
       this.direction();
       this.scope();
       untracked(() => this.load(false));
@@ -208,6 +210,7 @@ export class TransactionsTableComponent {
       view: this.view(),
       category: this.category(),
       clientId: this.clientId() ?? undefined,
+      contractId: this.contractId() ?? undefined,
       from: this.from() || undefined,
       to: this.to() || undefined,
     };

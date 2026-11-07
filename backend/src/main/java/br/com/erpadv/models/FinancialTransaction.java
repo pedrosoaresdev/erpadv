@@ -27,6 +27,8 @@ public class FinancialTransaction extends BaseEntity {
     private String clientName;
     private String caseId;
     private String caseNumber;
+    /** Contrato de origem (honorários gerados pelo módulo de contratos). */
+    private String contractId;
     /** Cliente (receitas) ou fornecedor/favorecido (despesas). */
     private String counterparty;
     private String documentNumber;

@@ -18,13 +18,14 @@ import { ClientFormDialogComponent } from './client-form-dialog';
 import { ClientsService } from './clients.service';
 import { InteractionDialogComponent } from './interaction-dialog';
 import { TransactionsTableComponent } from '../finance/transactions-table';
+import { DocumentsTableComponent } from '../documents/documents-table';
 
 /** Página individual do cliente: dados, processos vinculados e histórico de atendimentos. */
 @Component({
   selector: 'app-client-detail',
   imports: [
     RouterLink, MatButtonModule, MatIconModule, MatTabsModule, MatMenuModule, MatTooltipModule, LoadingComponent,
-    EmptyStateComponent, BrDatePipe, CentsPipe, TransactionsTableComponent,
+    EmptyStateComponent, BrDatePipe, CentsPipe, TransactionsTableComponent, DocumentsTableComponent,
   ],
   template: `
     <div class="page">
@@ -178,12 +179,11 @@ import { TransactionsTableComponent } from '../finance/transactions-table';
             </mat-tab>
           }
 
-          <mat-tab label="Documentos">
-            <div class="card tab-card">
-              <app-empty-state icon="folder_open" title="Gestão documental na Etapa 11"
-                text="Upload, versionamento e controle de acesso a documentos do cliente serão habilitados com o módulo de documentos." />
-            </div>
-          </mat-tab>
+          @if (auth.has('DOCUMENTS_READ')) {
+            <mat-tab label="Documentos">
+              <div class="tab-card"><app-documents-table [clientId]="c.id" [client]="{ id: c.id, name: c.name }" [compact]="true" /></div>
+            </mat-tab>
+          }
         </mat-tab-group>
       }
     </div>

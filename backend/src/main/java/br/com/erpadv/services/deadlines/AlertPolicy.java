@@ -21,12 +21,17 @@ public final class AlertPolicy {
     }
 
     public static Optional<Decision> evaluate(long daysLeft, List<Integer> alreadySent) {
-        if (daysLeft < 0 || daysLeft > THRESHOLDS.get(0)) {
+        return evaluate(daysLeft, alreadySent, THRESHOLDS);
+    }
+
+    /** Mesma política com marcos personalizados (em ordem decrescente), ex.: 30/7/1/0 para contratos. */
+    public static Optional<Decision> evaluate(long daysLeft, List<Integer> alreadySent, List<Integer> thresholds) {
+        if (daysLeft < 0 || daysLeft > thresholds.get(0)) {
             return Optional.empty();
         }
         Set<Integer> sent = alreadySent == null ? Set.of() : Set.copyOf(alreadySent);
         Set<Integer> due = new TreeSet<>();
-        for (int t : THRESHOLDS) {
+        for (int t : thresholds) {
             if (t >= daysLeft && !sent.contains(t)) {
                 due.add(t);
             }

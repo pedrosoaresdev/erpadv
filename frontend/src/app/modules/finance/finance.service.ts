@@ -21,6 +21,7 @@ export interface TransactionQuery {
   view?: TransactionView;
   category?: FinanceCategory | '';
   clientId?: string;
+  contractId?: string;
   from?: string;
   to?: string;
 }

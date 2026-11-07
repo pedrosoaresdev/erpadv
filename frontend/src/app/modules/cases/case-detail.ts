@@ -18,11 +18,12 @@ import { Deadline } from '../../core/models/models';
 import { DeadlinesService } from '../deadlines/deadlines.service';
 import { DeadlineFormDialogComponent } from '../deadlines/deadline-form-dialog';
 import { AppointmentDialogComponent } from '../calendar/appointment-dialog';
+import { DocumentsTableComponent } from '../documents/documents-table';
 
 /** Página do processo: dados, linha do tempo de movimentações e ações. */
 @Component({
   selector: 'app-case-detail',
-  imports: [RouterLink, MatButtonModule, MatIconModule, MatTooltipModule, LoadingComponent, EmptyStateComponent, BrDatePipe, CentsPipe],
+  imports: [RouterLink, MatButtonModule, MatIconModule, MatTooltipModule, LoadingComponent, EmptyStateComponent, BrDatePipe, CentsPipe, DocumentsTableComponent],
   template: `
     <div class="page">
       <a routerLink="/processos" class="back"><mat-icon>arrow_back</mat-icon>Processos</a>
@@ -130,6 +131,10 @@ import { AppointmentDialogComponent } from '../calendar/appointment-dialog';
             }
           </section>
         </div>
+        @if (auth.has('DOCUMENTS_READ')) {
+          <h3 class="docs-title">Documentos do processo</h3>
+          <app-documents-table [caseId]="p.id" [legalCase]="{ id: p.id, label: (p.cnjNumber || 'Sem CNJ') + ' · ' + p.clientName }" [compact]="true" />
+        }
       }
     </div>
   `,
@@ -146,6 +151,7 @@ import { AppointmentDialogComponent } from '../calendar/appointment-dialog';
     .meta { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
     .hero-actions { display: flex; gap: 8px; align-items: center; }
     .layout { display: grid; grid-template-columns: 360px 1fr; gap: 16px; align-items: start; }
+    .docs-title { font-size: 16px; margin: 24px 0 12px; }
     .side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
     .card-title .spacer { flex: 1; }
     .small-p { margin: 0; font-size: 13px; }
