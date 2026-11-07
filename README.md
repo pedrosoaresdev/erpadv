@@ -58,11 +58,16 @@ Documentação: [arquitetura e fluxo de autenticação](docs/ARQUITETURA.md) ·
 * **Agenda**: audiências, reuniões, consultas, julgamentos, sustentações orais, compromissos e
   atividades internas em visões dia/semana/mês, com prazos sobrepostos, responsáveis, vínculo com
   cliente/processo, lembretes e notificações (tempo real + push FCM).
+* **Financeiro**: contas a receber e a pagar com categorias de receitas (honorários, êxito, consultorias,
+  contratos, serviços) e despesas (aluguel, energia, internet, pessoal, sistemas, marketing, fornecedores…),
+  parcelamentos e despesas recorrentes, baixa com valor efetivo e comprovante (Firebase Storage via
+  backend), fluxo de caixa, projeção de 6 meses, DRE gerencial, inadimplência com aging e marcação
+  automática no CRM, exportação CSV e finanças pessoais dos sócios separadas das do escritório.
 * **Equipe**: papéis e permissões granulares por usuário.
 * **Auditoria**: trilha imutável encadeada por hash, com verificação de integridade.
 * **Busca global**, **notificações em tempo real**, **tema claro/escuro**, **sidebar recolhível**.
 
-Financeiro, contratos, documentos, criminal, IA, portal do cliente, relatórios e
+Contratos, documentos, criminal, IA, portal do cliente, relatórios e
 painel master aparecem na sidebar com a etapa prevista.
 
 ## Produção com Firebase real
@@ -93,7 +98,7 @@ cd frontend && npm install && npm start                  # http://localhost:4200
 
 | Suíte | Comando | O que cobre |
 |---|---|---|
-| Backend unitário + segurança | `cd backend && mvn test` | CPF/CNPJ/CNJ, criptografia, RBAC, cadeia de auditoria, serviço de clientes, contagem de prazos (feriados, recesso, suspensões), política de alertas, filtro JWT (401/403, bloqueio, revogação, isolamento, validação) |
-| Backend ponta a ponta | `cd firebase && npm run test:backend-e2e` | Cadastro → escritório → clientes → processos → isolamento → dashboard → auditoria → calendário forense → prazos (validação, alertas idempotentes) → agenda (lembretes) → convite/bloqueio, com Auth e Firestore reais no emulador |
+| Backend unitário + segurança | `cd backend && mvn test` | CPF/CNPJ/CNJ, criptografia, RBAC, cadeia de auditoria, serviço de clientes, contagem de prazos (feriados, recesso, suspensões), política de alertas, DRE, validação de arquivos, CSV, filtro JWT (401/403, bloqueio, revogação, isolamento, validação) |
+| Backend ponta a ponta | `cd firebase && npm run test:backend-e2e` | Cadastro → escritório → clientes → processos → isolamento → dashboard → auditoria → calendário forense → prazos (validação, alertas idempotentes) → agenda (lembretes) → financeiro (parcelas, inadimplência no CRM, baixa, comprovante no Storage, DRE, CSV, escopo pessoal) → convite/bloqueio, com Auth e Firestore reais no emulador |
 | Security Rules | `cd firebase && npm run test:rules` | Perfis, isolamento, auditoria imutável, notificações, Storage |
-| Frontend | `cd frontend && npm test -- --watch=false --browsers=ChromeHeadless` | Validadores, pipes, guards, interceptor, formulário de cliente, utilitários da agenda e de prazos |
+| Frontend | `cd frontend && npm test -- --watch=false --browsers=ChromeHeadless` | Validadores, pipes, guards, interceptor, formulário de cliente, utilitários da agenda, de prazos e do financeiro |

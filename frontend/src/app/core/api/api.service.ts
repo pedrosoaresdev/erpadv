@@ -1,4 +1,4 @@
-import { HttpClient, HttpContext, HttpContextToken, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpContextToken, HttpParams, HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ConfigService } from '../config/config.service';
@@ -32,6 +32,15 @@ export class ApiService {
 
   delete<T>(path: string): Observable<T> {
     return this.http.delete<T>(this.url(path));
+  }
+
+  /** Download binário autenticado (comprovantes, exportações). */
+  getBlob(path: string, params?: Record<string, ParamValue>): Observable<HttpResponse<Blob>> {
+    return this.http.get(this.url(path), { params: this.params(params), responseType: 'blob', observe: 'response' });
+  }
+
+  postForm<T>(path: string, form: FormData): Observable<T> {
+    return this.http.post<T>(this.url(path), form);
   }
 
   private url(path: string): string {

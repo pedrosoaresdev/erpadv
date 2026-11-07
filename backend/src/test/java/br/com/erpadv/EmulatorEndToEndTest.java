@@ -39,6 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.jobs.enabled=true",
         "app.jobs.deadline-alerts-cron=0 0 0 1 1 *",
         "app.jobs.appointment-reminders-ms=86400000",
+        "app.jobs.delinquency-cron=0 0 0 1 1 *",
         "app.security.profile-cache-seconds=1"
 })
 @AutoConfigureMockMvc
@@ -217,7 +218,104 @@ class EmulatorEndToEndTest {
                         .delete("/api/calendar/appointments/" + appointmentId).header("Authorization", "Bearer " + tokenA))
                 .andExpect(status().isNoContent());
 
-        // 8. Convite de funcionário (estagiário) e bloqueio
+        // 8. Etapa 10 — financeiro: parcelamento, inadimplência automática, baixa, comprovante, DRE, CSV, escopo pessoal
+        JsonNode installments = body(mvc.perform(post("/api/finance/transactions").header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(JSON.writeValueAsString(Map.of(
+                                "direction", "RECEITA", "category", "HONORARIOS", "description", "Honorários contratuais",
+                                "amountCents", 300001, "dueDate", today.minusDays(5).toString(),
+                                "clientId", clientId, "installments", 3))))
+                .andExpect(status().isCreated()).andReturn());
+        assertThat(installments.size()).isEqualTo(3);
+        assertThat(installments.get(0).get("amountCents").asLong()).isEqualTo(100001);
+        assertThat(installments.get(1).get("amountCents").asLong()).isEqualTo(100000);
+        assertThat(installments.get(0).get("situation").asText()).isEqualTo("ATRASADO");
+        String firstInstallment = installments.get(0).get("id").asText();
+        mvc.perform(get("/api/clients/" + clientId).header("Authorization", "Bearer " + tokenA))
+                .andExpect(jsonPath("$.defaulting").value(true));
+        mvc.perform(get("/api/finance/delinquency").header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalCents").value(100001))
+                .andExpect(jsonPath("$.clients[0].clientId").value(clientId));
+
+        mvc.perform(post("/api/finance/transactions/" + firstInstallment + "/pay").header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(JSON.writeValueAsString(Map.of("paidDate", today.toString(), "paidAmountCents", 100001, "paymentMethod", "PIX"))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.situation").value("PAGO"));
+        mvc.perform(get("/api/clients/" + clientId).header("Authorization", "Bearer " + tokenA))
+                .andExpect(jsonPath("$.defaulting").value(false));
+
+        JsonNode rent = body(mvc.perform(post("/api/finance/transactions").header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(JSON.writeValueAsString(Map.of(
+                                "direction", "DESPESA", "category", "ALUGUEL", "description", "Aluguel da sede",
+                                "amountCents", 450000, "dueDate", today.toString(), "counterparty", "Imobiliária Centro",
+                                "recurrenceMonths", 3))))
+                .andExpect(status().isCreated()).andReturn());
+        assertThat(rent.size()).isEqualTo(3);
+        assertThat(rent.get(2).get("amountCents").asLong()).isEqualTo(450000);
+        mvc.perform(post("/api/finance/transactions/" + rent.get(0).get("id").asText() + "/pay").header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(JSON.writeValueAsString(Map.of("paidDate", today.toString(), "paidAmountCents", 450000, "paymentMethod", "BOLETO"))))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/finance/transactions").header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(JSON.writeValueAsString(Map.of(
+                                "direction", "DESPESA", "category", "HONORARIOS", "description", "Categoria incompatível",
+                                "amountCents", 100, "dueDate", today.toString()))))
+                .andExpect(status().isUnprocessableEntity());
+
+        mvc.perform(get("/api/finance/summary").header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.receivedCents").value(100001))
+                .andExpect(jsonPath("$.paidCents").value(450000))
+                .andExpect(jsonPath("$.balanceCents").value(100001 - 450000))
+                .andExpect(jsonPath("$.feesPendingCents").value(200000))
+                .andExpect(jsonPath("$.dre.netRevenueCents").value(100001))
+                .andExpect(jsonPath("$.dre.resultCents").value(100001 - 450000));
+
+        byte[] pdf = "%PDF-1.4\n% comprovante de teste\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/finance/transactions/" + firstInstallment + "/receipt")
+                        .file(new org.springframework.mock.web.MockMultipartFile("file", "../Comprovante PIX.pdf", "application/pdf", pdf))
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasReceipt").value(true))
+                .andExpect(jsonPath("$.receiptName").value("Comprovante_PIX.pdf"));
+        MvcResult download = mvc.perform(get("/api/finance/transactions/" + firstInstallment + "/receipt")
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(download.getResponse().getContentAsByteArray()).isEqualTo(pdf);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/finance/transactions/" + firstInstallment + "/receipt")
+                        .file(new org.springframework.mock.web.MockMultipartFile("file", "virus.pdf", "application/pdf", new byte[]{'M', 'Z', 1, 2}))
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("FILE_TYPE_NOT_ALLOWED"));
+
+        String csv = mvc.perform(get("/api/finance/transactions/export").header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(csv).contains("Honorários contratuais").contains("Aluguel da sede");
+
+        JsonNode personal = body(mvc.perform(post("/api/finance/transactions").header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(JSON.writeValueAsString(Map.of(
+                                "direction", "DESPESA", "category", "OUTRA_DESPESA", "description", "Despesa pessoal do sócio",
+                                "amountCents", 9900, "dueDate", today.toString(), "scope", "PESSOAL"))))
+                .andExpect(status().isCreated()).andReturn());
+        String personalId = personal.get(0).get("id").asText();
+        JsonNode officeList = body(mvc.perform(get("/api/finance/transactions").param("view", "TODOS").param("direction", "DESPESA")
+                        .header("Authorization", "Bearer " + tokenA)).andExpect(status().isOk()).andReturn());
+        officeList.get("items").forEach(item -> assertThat(item.get("id").asText()).isNotEqualTo(personalId));
+        mvc.perform(get("/api/finance/transactions").param("view", "TODOS").param("scope", "PESSOAL")
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(jsonPath("$.items[0].id").value(personalId));
+        mvc.perform(get("/api/finance/transactions/" + firstInstallment).header("Authorization", "Bearer " + tokenB))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/finance/dashboard").header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.scope").value("ESCRITORIO"));
+
+        // 9. Convite de funcionário (estagiário) e bloqueio
         JsonNode invite = body(mvc.perform(post("/api/employees").header("Authorization", "Bearer " + tokenA)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"estagiario-" + UUID.randomUUID() + "@escritorio-a.test\","

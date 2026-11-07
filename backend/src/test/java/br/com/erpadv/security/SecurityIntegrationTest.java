@@ -71,6 +71,10 @@ class SecurityIntegrationTest {
     br.com.erpadv.services.DeadlineService deadlineService;
     @MockitoBean
     br.com.erpadv.services.CalendarService calendarService;
+    @MockitoBean
+    br.com.erpadv.services.FinanceService financeService;
+    @MockitoBean
+    br.com.erpadv.services.FinanceReportService financeReportService;
 
     private void token(String token, String uid, String officeId, Role role, long iatSeconds) throws Exception {
         FirebaseToken decoded = mock(FirebaseToken.class);
@@ -281,5 +285,51 @@ class SecurityIntegrationTest {
                 .andExpect(jsonPath("$.fields.description").exists())
                 .andExpect(jsonPath("$.fields.days").exists())
                 .andExpect(jsonPath("$.fields.responsibleUid").exists());
+    }
+
+    // ------------------------------------------------------------------ Etapa 10: financeiro
+
+    @Test
+    void financeiroAcessaContasEAdvogadoNao() throws Exception {
+        token("t-fin10", "fin10", "office1", Role.FINANCEIRO, now());
+        profile("fin10", "office1", Role.FINANCEIRO, UserStatus.ACTIVE, null);
+        when(financeService.list(any(), any(), any(), anyInt())).thenReturn(new CursorPage<>(List.of(), null));
+        mvc.perform(get("/api/finance/transactions").header("Authorization", "Bearer t-fin10"))
+                .andExpect(status().isOk());
+
+        token("t-adv10", "adv10", "office1", Role.ADVOGADO, now());
+        profile("adv10", "office1", Role.ADVOGADO, UserStatus.ACTIVE, null);
+        mvc.perform(get("/api/finance/transactions").header("Authorization", "Bearer t-adv10"))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/finance/dashboard").header("Authorization", "Bearer t-adv10"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void secretariaNaoLancaNemBaixaContas() throws Exception {
+        token("t-sec10", "sec10", "office1", Role.SECRETARIA, now());
+        profile("sec10", "office1", Role.SECRETARIA, UserStatus.ACTIVE, null);
+        mvc.perform(post("/api/finance/transactions").header("Authorization", "Bearer t-sec10")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"direction\":\"RECEITA\",\"category\":\"HONORARIOS\",\"description\":\"x\","
+                                + "\"amountCents\":1000,\"dueDate\":\"2026-12-01\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/finance/transactions/abc/pay").header("Authorization", "Bearer t-sec10")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"paidDate\":\"2026-11-01\",\"paidAmountCents\":1000,\"paymentMethod\":\"PIX\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void lancamentoValidaValorPositivo() throws Exception {
+        token("t-fin11", "fin11", "office1", Role.FINANCEIRO, now());
+        profile("fin11", "office1", Role.FINANCEIRO, UserStatus.ACTIVE, null);
+        mvc.perform(post("/api/finance/transactions").header("Authorization", "Bearer t-fin11")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"direction\":\"RECEITA\",\"category\":\"HONORARIOS\",\"description\":\"x\","
+                                + "\"amountCents\":-5,\"dueDate\":\"2026-12-01\",\"installments\":99}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fields.amountCents").exists())
+                .andExpect(jsonPath("$.fields.installments").exists());
     }
 }

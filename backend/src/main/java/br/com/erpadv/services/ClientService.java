@@ -174,6 +174,7 @@ public class ClientService {
     public ClientResponse setDefaulting(AuthenticatedUser user, String id, boolean defaulting) {
         Client client = load(user, id);
         client.setDefaulting(defaulting);
+        client.setDefaultingAuto(false);
         touch(user, client);
         clients.save(user.officeId(), client);
         audit.record(user, defaulting ? "CLIENT_MARKED_DEFAULTING" : "CLIENT_UNMARKED_DEFAULTING", "client", id,

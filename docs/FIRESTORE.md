@@ -34,8 +34,7 @@ auditoria). Campos comuns a todas as entidades:
 | `appointments` | agenda (audiências = `type: AUDIENCIA`) | `type`, `title`, `start`, `end` (epoch ms), `allDay`, `location`, `meetingUrl`, `responsibleUids[]`, `clientId`, `caseId`, `reminders[]` (minutos), `remindersSent[]`, `restricted` |
 | `contracts` | contratos | `clientId`, `caseIds[]`, `type`, `status`, `templateId`, `signedDocumentId`, `history[]` |
 | `fees` | honorários | `contractId`, `clientId`, `kind` (`FIXO`/`PARCELADO`/`ETAPAS`/`EXITO`), `amountCents`, `installments[]` |
-| `financial_transactions` | lançamentos (receber/pagar) | `direction` (`IN`/`OUT`), `category`, `amountCents`, `dueDate`, `paidAt`, `status`, `feeId`, `receiptDocumentId`, `scope` (`ESCRITORIO`/`SOCIO`) |
-| `expenses` | despesas recorrentes/cadastro | `category`, `supplier`, `amountCents`, `recurrence` |
+| `financial_transactions` | lançamentos (receber/pagar) | `direction` (`RECEITA`/`DESPESA`), `category`, `scope` (`ESCRITORIO`/`PESSOAL`), `ownerUid` (pessoal), `description`, `amountCents`, `dueDate`, `status` (`ABERTO`/`PAGO`/`CANCELADO`; *atrasado* é derivado), `paidDate`, `paidAmountCents`, `paymentMethod`, `clientId`, `caseId`, `counterparty`, `groupId`/`installmentNumber`/`installmentCount`/`recurrent`, `receiptPath`/`receiptSha256` |
 | `documents` | metadados de arquivos | `name`, `category`, `clientId`, `caseId`, `storagePath`, `contentType`, `size`, `sha256`, `currentVersion`, `confidential`, `sharedWithClient`, `uploadedBy` |
 | `document_versions` | versões | `documentId`, `version`, `storagePath`, `sha256`, `uploadedBy` |
 | `document_access_logs` | quem leu/baixou | `documentId`, `uid`, `action`, `at`, `ip` |
@@ -64,6 +63,7 @@ Definidos em `firebase/firestore.indexes.json`. Cada consulta paginada do backen
 ```
 offices/{officeId}/documents/{documentId}/v{versao}/{nomeSanitizado}
 offices/{officeId}/clients/{clientId}/...
+offices/{officeId}/finance/{transactionId}/{uuid}-{nome}   (comprovantes)
 ```
 As Storage Rules negam leitura e escrita a qualquer cliente; os arquivos só trafegam pelo
 backend (upload validado por tipo, tamanho e assinatura binária; download auditado).

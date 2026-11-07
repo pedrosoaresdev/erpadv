@@ -19,10 +19,13 @@
 | Validação | Bean Validation em todos os DTOs + validação de CPF/CNPJ/CNJ no front e no back; erros padronizados (RFC 7807) sem stack trace. |
 | Credenciais | Nenhuma credencial administrativa no front ou nas imagens; service account via Docker secret; chaves de desenvolvimento recusadas com `APP_PRODUCTION=true`. |
 | Logs | JSON estruturado com `traceId`, `uid`, `officeId`; logger `AUDIT` dedicado. |
+| Arquivos | Upload só via backend; tipo detectado pela assinatura binária (PDF/PNG/JPEG), limite de 10 MB, nome sanitizado, SHA-256 registrado; download autenticado com `no-store`/`nosniff` e auditado. |
+| Separação patrimonial | Lançamentos pessoais de sócios visíveis apenas ao próprio sócio e excluídos de relatórios do escritório. |
+| Exportações | CSV com neutralização de injeção de fórmulas (`=`, `+`, `-`, `@`) e registro na auditoria. |
 
 ## Pendências (próximas etapas)
 
-* Upload de documentos com verificação de assinatura binária (magic bytes) e antivírus (Etapa 11).
+* Antivírus nos uploads (a verificação por assinatura binária, tamanho e nome seguro já está ativa para comprovantes).
 * Registro de tentativas de login malsucedidas (via Identity Platform blocking functions) para o Painel Master.
 * Rotação de chaves de criptografia (versão `v1:` já prevista no formato do dado cifrado).
 * Política de retenção configurável por escritório e rotina de anonimização.

@@ -27,6 +27,8 @@ export const routes: Routes = [
         loadComponent: () => import('./modules/deadlines/deadlines-list').then((m) => m.DeadlinesListComponent) },
       { path: 'agenda', canActivate: [permissionGuard], data: { permission: 'CALENDAR_READ' }, title: 'Agenda · ERPAdv',
         loadComponent: () => import('./modules/calendar/calendar-page').then((m) => m.CalendarPageComponent) },
+      { path: 'financeiro', canActivate: [permissionGuard], data: { permission: 'FINANCE_READ' }, title: 'Financeiro · ERPAdv',
+        loadComponent: () => import('./modules/finance/finance-page').then((m) => m.FinancePageComponent) },
       { path: 'equipe', canActivate: [permissionGuard], data: { permission: 'EMPLOYEES_READ' }, title: 'Equipe · ERPAdv',
         loadComponent: () => import('./modules/employees/employees-list').then((m) => m.EmployeesListComponent) },
       { path: 'auditoria', canActivate: [permissionGuard], data: { permission: 'AUDIT_READ' }, title: 'Auditoria · ERPAdv',

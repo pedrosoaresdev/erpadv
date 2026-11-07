@@ -17,13 +17,14 @@ import { CaseFormDialogComponent } from '../cases/case-form-dialog';
 import { ClientFormDialogComponent } from './client-form-dialog';
 import { ClientsService } from './clients.service';
 import { InteractionDialogComponent } from './interaction-dialog';
+import { TransactionsTableComponent } from '../finance/transactions-table';
 
 /** Página individual do cliente: dados, processos vinculados e histórico de atendimentos. */
 @Component({
   selector: 'app-client-detail',
   imports: [
     RouterLink, MatButtonModule, MatIconModule, MatTabsModule, MatMenuModule, MatTooltipModule, LoadingComponent,
-    EmptyStateComponent, BrDatePipe, CentsPipe,
+    EmptyStateComponent, BrDatePipe, CentsPipe, TransactionsTableComponent,
   ],
   template: `
     <div class="page">
@@ -170,6 +171,12 @@ import { InteractionDialogComponent } from './interaction-dialog';
               }
             </div>
           </mat-tab>
+
+          @if (auth.has('FINANCE_READ')) {
+            <mat-tab label="Financeiro">
+              <div class="tab-card"><app-transactions-table direction="RECEITA" [clientId]="c.id" [client]="{ id: c.id, name: c.name }" /></div>
+            </mat-tab>
+          }
 
           <mat-tab label="Documentos">
             <div class="card tab-card">

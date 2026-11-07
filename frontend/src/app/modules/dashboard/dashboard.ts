@@ -7,6 +7,10 @@ import { ChartConfiguration } from 'chart.js';
 import { ApiService } from '../../core/api/api.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { Dashboard } from '../../core/models/models';
+import { DelinquencyReport, FinanceSummary } from '../finance/finance.models';
+import { FinanceService } from '../finance/finance.service';
+
+const BRL0 = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
 import { CHART_COLORS, ChartComponent } from '../../shared/components/chart';
 import { EmptyStateComponent, LoadingComponent, PageHeaderComponent, StatCardComponent } from '../../shared/components/ui';
 
@@ -63,6 +67,19 @@ const iso = (d: Date) =>
             hint="Próximas audiências agendadas" /></a>
         </section>
 
+        @if (finance(); as f) {
+          <section class="kpis second">
+            <a class="kpi-link" routerLink="/financeiro"><app-stat-card label="Faturamento do mês" [value]="money(f.currentMonthIncomeCents)" icon="payments" [accent]="true"
+              [hint]="'Recebido no período: ' + money(f.receivedCents)" /></a>
+            <a class="kpi-link" routerLink="/financeiro"><app-stat-card label="Honorários recebidos" [value]="money(f.feesReceivedCents)" icon="gavel"
+              [hint]="'Pendentes: ' + money(f.feesPendingCents)" tone="success" /></a>
+            <a class="kpi-link" routerLink="/financeiro"><app-stat-card label="Despesas pagas" [value]="money(f.paidCents)" icon="receipt_long"
+              [hint]="'Saldo do período: ' + money(f.balanceCents)" [tone]="f.balanceCents >= 0 ? 'success' : 'danger'" /></a>
+            <a class="kpi-link" routerLink="/financeiro"><app-stat-card label="Honorários/receitas em atraso" [value]="money(f.overdueReceivableCents)" icon="report"
+              [hint]="f.overdueReceivableCount + ' título(s) vencido(s)'" [tone]="f.overdueReceivableCount ? 'danger' : 'success'" /></a>
+          </section>
+        }
+
         <section class="pending">
           @for (p of pendingList(); track p.key) {
             <div class="pending-item"><mat-icon>schedule</mat-icon><span>{{ p.label }}</span></div>
@@ -90,6 +107,16 @@ const iso = (d: Date) =>
             <div class="card-title"><mat-icon>bar_chart</mat-icon>Novos processos por mês</div>
             <app-chart [config]="newCasesChart()" [height]="260" />
           </div>
+          @if (finance()) {
+            <div class="card card-pad span-2">
+              <div class="card-title"><mat-icon>account_balance</mat-icon>Receitas, despesas e evolução financeira</div>
+              <app-chart [config]="financeChart()" [height]="280" />
+            </div>
+            <div class="card card-pad">
+              <div class="card-title"><mat-icon>hourglass_bottom</mat-icon>Honorários em atraso</div>
+              @if (agingChart(); as a) { <app-chart [config]="a" [height]="280" /> }
+            </div>
+          }
           <div class="card card-pad">
             <div class="card-title"><mat-icon>event</mat-icon>Audiências por mês</div>
             <app-chart [config]="hearingsChart()" [height]="260" />
@@ -123,6 +150,7 @@ const iso = (d: Date) =>
 export class DashboardComponent {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
+  private readonly financeApi = inject(FinanceService);
 
   readonly period = signal<PeriodKey>('12m');
   readonly data = signal<Dashboard | null>(null);
@@ -192,6 +220,36 @@ export class DashboardComponent {
     };
   });
 
+  readonly finance = signal<FinanceSummary | null>(null);
+  readonly delinquency = signal<DelinquencyReport | null>(null);
+  readonly money = (cents: number) => BRL0.format(cents / 100);
+
+  readonly financeChart = computed<ChartConfiguration>(() => {
+    const m = this.finance()?.monthly ?? [];
+    return {
+      type: 'bar',
+      data: {
+        labels: m.map((p) => fmtMonth(p.month)),
+        datasets: [
+          { type: 'bar', label: 'Receitas', data: m.map((p) => p.incomeCents / 100), backgroundColor: '#2f855a', borderRadius: 6 },
+          { type: 'bar', label: 'Despesas', data: m.map((p) => p.expenseCents / 100), backgroundColor: '#b42318', borderRadius: 6 },
+          { type: 'line', label: 'Resultado acumulado', data: m.map((p) => p.cumulativeCents / 100), borderColor: '#c5a46d', backgroundColor: '#c5a46d', tension: 0.3 },
+        ],
+      } as ChartConfiguration['data'],
+      options: { scales: { y: { ticks: { callback: (v) => BRL0.format(Number(v)) } }, x: { grid: { display: false } } } },
+    };
+  });
+
+  readonly agingChart = computed<ChartConfiguration | null>(() => {
+    const d = this.delinquency();
+    if (!d) return null;
+    return {
+      type: 'bar',
+      data: { labels: d.aging.map((a) => a.label), datasets: [{ label: 'Em atraso', data: d.aging.map((a) => a.amountCents / 100), backgroundColor: ['#f0b55b', '#e58a3a', '#c2410c', '#b42318'], borderRadius: 6 }] },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: (v) => BRL0.format(Number(v)) } }, x: { grid: { display: false } } } },
+    };
+  });
+
   readonly hearingsChart = computed<ChartConfiguration>(() => {
     const items = this.data()?.hearings.byMonth ?? [];
     return {
@@ -235,6 +293,10 @@ export class DashboardComponent {
       default: from = new Date(today.getFullYear(), today.getMonth() - 11, 1);
     }
     this.loading.set(true);
+    if (this.auth.has('FINANCE_DASHBOARD_VIEW')) {
+      this.financeApi.dashboard(iso(from), iso(new Date(today.getFullYear(), today.getMonth() + 1, 0))).subscribe({ next: (f) => this.finance.set(f), error: () => this.finance.set(null) });
+      if (this.auth.has('FINANCE_READ')) this.financeApi.delinquency().subscribe((d) => this.delinquency.set(d));
+    }
     this.api.get<Dashboard>('/dashboard', { from: iso(from), to: iso(today) }).subscribe({
       next: (d) => { this.data.set(d); this.loading.set(false); },
       error: () => this.loading.set(false),

@@ -28,7 +28,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: 'Gestão',
     items: [
-      { label: 'Financeiro', icon: 'account_balance_wallet', permission: 'FINANCE_READ', stage: 10 },
+      { label: 'Financeiro', icon: 'account_balance_wallet', route: '/financeiro', permission: 'FINANCE_READ' },
       { label: 'Contratos', icon: 'handshake', permission: 'CONTRACTS_READ', stage: 11 },
       { label: 'Documentos', icon: 'folder_open', permission: 'DOCUMENTS_READ', stage: 11 },
       { label: 'Criminal', icon: 'policy', permission: 'CRIMINAL_READ', stage: 12 },

@@ -196,7 +196,6 @@ public class DashboardService {
                 months.stream().map(m -> new MonthPoint(m.toString(), v.get("hr.m." + m), null)).toList());
 
         Map<String, String> pendingModules = new LinkedHashMap<>();
-        pendingModules.put("finance", "Financeiro e honorários — Etapa 10");
         pendingModules.put("contracts", "Contratos — Etapa 11");
 
         return new DashboardResponse(start, end, clientStats, caseStats, clientGrowth, newCases, byArea, byStatus,

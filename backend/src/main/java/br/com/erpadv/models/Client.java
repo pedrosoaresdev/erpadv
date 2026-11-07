@@ -31,6 +31,8 @@ public class Client extends BaseEntity {
     private String notes;
     private ClientStatus status;
     private boolean defaulting;
+    /** Inadimplência marcada automaticamente pelo financeiro (contas a receber vencidas). */
+    private boolean defaultingAuto;
     private String responsibleUid;
     private Instant inactivatedAt;
     private String inactivationReason;

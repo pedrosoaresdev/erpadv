@@ -37,6 +37,7 @@ services:
       FIREBASE_USE_EMULATOR: "true"
       FIRESTORE_EMULATOR_HOST: firebase-emulator:8080
       FIREBASE_AUTH_EMULATOR_HOST: firebase-emulator:9099
+      FIREBASE_STORAGE_EMULATOR_HOST: firebase-emulator:9199
       FIREBASE_EMULATOR_PUBLIC_AUTH_URL: http://localhost:${EMULATOR_AUTH_PORT:-9099}
       # Chaves de DESENVOLVIMENTO (as mesmas do .env.example). Em produção use chaves próprias.
       DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-ZGV2LW9ubHkta2V5LWNoYW5nZS1tZS0zMi1ieXRlcyE=}
