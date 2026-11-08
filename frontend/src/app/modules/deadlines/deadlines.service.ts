@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, shareReplay } from 'rxjs';
 import { ApiService } from '../../core/api/api.service';
 import {
+  AuditLog,
   CountingMode,
   CourtCalendar,
   CourtCalendarEntry,
@@ -19,7 +20,29 @@ export class DeadlinesService {
   private readonly api = inject(ApiService);
   private staff$: Observable<EmployeeOption[]> | null = null;
 
-  list(view: DeadlineView, filter: { responsibleUid?: string; caseId?: string }, cursor: string | null, size = 30): Observable<CursorPage<Deadline>> {
+  publicationDate(availability: string, court: string | null): Observable<{ availabilityDate: string; publicationDate: string; suggestedStartDate: string; notes: string[] }> {
+    return this.api.get('/deadlines/publication-date', { availability, court }, true);
+  }
+
+  history(id: string) {
+    return this.api.get<CursorPage<AuditLog>>(`/deadlines/${encodeURIComponent(id)}/history`);
+  }
+
+  uploadReceipt(id: string, file: File): Observable<Deadline> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.api.postForm(`/deadlines/${encodeURIComponent(id)}/receipt`, form);
+  }
+
+  receipt(id: string) {
+    return this.api.getBlob(`/deadlines/${encodeURIComponent(id)}/receipt`);
+  }
+
+  report(q: { from: string; to: string; responsibleUid?: string; format: 'pdf' | 'xlsx' }) {
+    return this.api.getBlob('/deadlines/report', q);
+  }
+
+  list(view: DeadlineView, filter: { responsibleUid?: string; caseId?: string; clientId?: string }, cursor: string | null, size = 30): Observable<CursorPage<Deadline>> {
     return this.api.get('/deadlines', { view, ...filter, cursor, size });
   }
 

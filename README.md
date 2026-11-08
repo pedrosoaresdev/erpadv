@@ -68,10 +68,29 @@ Documentação: [arquitetura e fluxo de autenticação](docs/ARQUITETURA.md) ·
 * **Prazos**: contagem sugerida em dias úteis (CPC, arts. 219, 220 e 224 — feriados nacionais e
   móveis, recesso de 20/12 a 20/01) ou corridos com prorrogação, feriados locais e suspensões por
   tribunal, validação obrigatória pelo advogado responsável, indicadores (hoje, urgentes, futuros,
-  vencidos, concluídos) e alertas automáticos 10, 5, 3 e 1 dia antes e no dia do vencimento.
-* **Agenda**: audiências, reuniões, consultas, julgamentos, sustentações orais, compromissos e
-  atividades internas em visões dia/semana/mês, com prazos sobrepostos, responsáveis, vínculo com
-  cliente/processo, lembretes e notificações (tempo real + push FCM).
+  vencidos, concluídos) e alertas automáticos 10, 5, 3 e 1 dia antes e no dia do vencimento; origem da
+  comunicação (DJe, intimação eletrônica/pessoal, citação…), datas de disponibilização, publicação (sugerida
+  pelo calendário forense) e ciência, comprovante de cumprimento, histórico com antes/depois, relatório por
+  responsável (PDF/Excel) e filtros por advogado, processo e cliente.
+* **Agenda**: audiências, reuniões, atendimentos, julgamentos, sustentações orais, despachos, perícias,
+  diligências, compromissos e atividades internas em visões dia/semana/mês, agenda por advogado, recorrência
+  (diária, semanal, quinzenal, mensal), convidados e confirmação de presença, link de videoconferência e local,
+  status com resultado, exportação .ics (Google Calendar/Outlook), histórico, relatório, lembretes e notificações.
+* **Audiências**: painel das próximas e realizadas (30/90 dias), por advogado e situação, com registro do
+  resultado, indicadores e relatório.
+* **Tarefas**: lista única das tarefas da equipe (cartões de todos os quadros), criação rápida, minhas/da equipe,
+  abertas/atrasadas/concluídas, vínculo com cliente e processo.
+* **Central de documentos**: pastas e subpastas, etiquetas, favoritos, renomear, mover, copiar, compartilhar com
+  a equipe, lixeira com restauração e eliminação definitiva, versões, PDF/DOC/DOCX/XLS/XLSX/PPT/PPTX/JPG/PNG/TXT,
+  envio múltiplo com arrastar e soltar, limite configurável (`DOCUMENTS_MAX_MB`), aviso de duplicidade e
+  visualizador integrado (PDF com zoom, páginas, miniaturas, rotação, busca no texto, tela cheia, impressão e
+  download; imagens e texto).
+* **Editor Jurídico**: 14 modelos do sistema (procuração, contrato de honorários, petição inicial, contestação,
+  réplica, recurso, contrarrazões, declaração de hipossuficiência, substabelecimento, notificação extrajudicial,
+  requerimento, parecer, relatório processual e documento em branco) e modelos do escritório; campos automáticos
+  de cliente, processo, escritório e advogado (pendentes destacados); cabeçalho, rodapé e numeração de páginas;
+  exportação PDF/DOCX, impressão, envio à central de documentos; histórico de versões com restauração;
+  rascunho/final.
 * **Financeiro**: contas a receber e a pagar com categorias de receitas (honorários, êxito, consultorias,
   contratos, serviços) e despesas (aluguel, energia, internet, pessoal, sistemas, marketing, fornecedores…),
   parcelamentos e despesas recorrentes, baixa com valor efetivo e comprovante (Firebase Storage via
@@ -136,7 +155,7 @@ cd frontend && npm install && npm start                  # http://localhost:4200
 
 | Suíte | Comando | O que cobre |
 |---|---|---|
-| Backend unitário + segurança | `cd backend && mvn test` | relatórios PDF/Excel (injeção de fórmulas), agrupamentos do dashboard, pesquisa sem acentos, CPF/CNPJ/CNJ, criptografia, RBAC, cadeia de auditoria, serviço de clientes, contagem de prazos (feriados, recesso, suspensões), política de alertas, DRE, validação de arquivos, CSV, valor por extenso, minuta, exportação PDF/DOCX, filtro JWT (401/403, bloqueio, revogação, isolamento, validação) |
-| Backend ponta a ponta | `cd firebase && npm run test:backend-e2e` | Fase 1 (cliente PJ completo, duplicidade, ficha, exclusão com vínculos, processo com sentença/recurso, abas, relatório, duplicar/excluir, dashboard por advogado e exportação, pesquisa global); painel master → escritório com administrador → cargo personalizado → integrante com senha → quadros (WIP, automação, menções, indicadores) → CRM (funil, conversão) → limite de usuários → suspensão; e o fluxo: cadastro → escritório → clientes → processos → isolamento → dashboard → auditoria → calendário forense → prazos (validação, alertas idempotentes) → agenda (lembretes) → financeiro (parcelas, inadimplência no CRM, baixa, comprovante no Storage, DRE, CSV, escopo pessoal) → documentos (versões, acessos, arquivamento) → contratos (minuta, PDF/DOCX, ativação, êxito, etapas, assinado, cancelamento) → convite/bloqueio, com Auth e Firestore reais no emulador |
+| Backend unitário + segurança | `cd backend && mvn test` | saneamento do editor, campos escapados, modelos, exportação PDF (numeração) e DOCX (cabeçalho/rodapé/tabelas), recorrência da agenda, formatos OOXML/OLE/TXT, permissões da lixeira/pastas/editor/relatórios; relatórios PDF/Excel (injeção de fórmulas), agrupamentos do dashboard, pesquisa sem acentos, CPF/CNPJ/CNJ, criptografia, RBAC, cadeia de auditoria, serviço de clientes, contagem de prazos (feriados, recesso, suspensões), política de alertas, DRE, validação de arquivos, CSV, valor por extenso, minuta, exportação PDF/DOCX, filtro JWT (401/403, bloqueio, revogação, isolamento, validação) |
+| Backend ponta a ponta | `cd firebase && npm run test:backend-e2e` | Fase 2 (prazo com origem/publicação/comprovante/histórico/relatório; série recorrente com convidados, confirmação, status, ICS, audiências e relatório; tarefas; pastas, ciclo recusado, XLSX, etiquetas, duplicidade, favoritos, mover/copiar, compartilhar, lixeira, restauração e eliminação auditada; editor: modelos, campos, saneamento, versões, finalização, PDF/DOCX, envio à central, restauração, modelo do escritório); Fase 1 (cliente PJ completo, duplicidade, ficha, exclusão com vínculos, processo com sentença/recurso, abas, relatório, duplicar/excluir, dashboard por advogado e exportação, pesquisa global); painel master → escritório com administrador → cargo personalizado → integrante com senha → quadros (WIP, automação, menções, indicadores) → CRM (funil, conversão) → limite de usuários → suspensão; e o fluxo: cadastro → escritório → clientes → processos → isolamento → dashboard → auditoria → calendário forense → prazos (validação, alertas idempotentes) → agenda (lembretes) → financeiro (parcelas, inadimplência no CRM, baixa, comprovante no Storage, DRE, CSV, escopo pessoal) → documentos (versões, acessos, arquivamento) → contratos (minuta, PDF/DOCX, ativação, êxito, etapas, assinado, cancelamento) → convite/bloqueio, com Auth e Firestore reais no emulador |
 | Security Rules | `cd firebase && npm run test:rules` | Perfis, isolamento, auditoria imutável, notificações, Storage |
-| Frontend | `cd frontend && npm test -- --watch=false --browsers=ChromeHeadless` | Validadores, pipes, guards, interceptor, formulário de cliente, utilitários da agenda, de prazos e do financeiro |
+| Frontend | `cd frontend && npm test -- --watch=false --browsers=ChromeHeadless` | Árvore de pastas, busca no PDF, saneamento do editor, validadores, pipes, guards, interceptor, formulário de cliente, utilitários da agenda, de prazos e do financeiro |

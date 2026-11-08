@@ -94,6 +94,8 @@ class SecurityIntegrationTest {
     br.com.erpadv.services.DocumentService documentService;
     @MockitoBean
     br.com.erpadv.services.ContractService contractService;
+    @MockitoBean
+    br.com.erpadv.services.LegalEditorService legalEditorService;
 
     private void token(String token, String uid, String officeId, Role role, long iatSeconds) throws Exception {
         FirebaseToken decoded = mock(FirebaseToken.class);
@@ -503,5 +505,75 @@ class SecurityIntegrationTest {
         when(searchService.search(any(), any())).thenReturn(List.of());
         mvc.perform(get("/api/search").param("q", "silva").header("Authorization", "Bearer t-sec7"))
                 .andExpect(status().isOk());
+    }
+
+    // ------------------------------------------------------------------ Fase 2: operação jurídica
+
+    @Test
+    void estagiarioConsultaDocumentosMasNaoOrganizaNemEditaPecas() throws Exception {
+        token("t-est20", "est20", "office1", Role.ESTAGIARIO, now());
+        profile("est20", "office1", Role.ESTAGIARIO, UserStatus.ACTIVE, null);
+        String bearer = "Bearer t-est20";
+        mvc.perform(post("/api/documents/d1/trash").header("Authorization", bearer)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/documents/d1/move").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"folderId\":\"f1\"}")).andExpect(status().isForbidden());
+        mvc.perform(post("/api/documents/folders").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Petições\"}")).andExpect(status().isForbidden());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/documents/d1")
+                .header("Authorization", bearer)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/legal-editor/documents").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"templateId\":\"sys-procuracao\"}")).andExpect(status().isForbidden());
+        mvc.perform(post("/api/legal-editor/documents/x/finalize").header("Authorization", bearer)).andExpect(status().isForbidden());
+        verify(documentService, never()).trash(any(), any());
+        verify(legalEditorService, never()).create(any(), any());
+
+        // leitura e favoritos (pessoais) continuam permitidos
+        when(legalEditorService.templates(any())).thenReturn(List.of());
+        mvc.perform(get("/api/legal-editor/templates").header("Authorization", bearer)).andExpect(status().isOk());
+        mvc.perform(post("/api/documents/d1/favorite").header("Authorization", bearer)).andExpect(status().isOk());
+        verify(documentService).favorite(any(), org.mockito.ArgumentMatchers.eq("d1"), org.mockito.ArgumentMatchers.eq(true));
+    }
+
+    @Test
+    void eliminacaoDefinitivaExigePermissaoPropria() throws Exception {
+        token("t-adv20", "adv20", "office1", Role.ADVOGADO, now());
+        profile("adv20", "office1", Role.ADVOGADO, UserStatus.ACTIVE, null);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/documents/d1")
+                .param("reason", "duplicado").header("Authorization", "Bearer t-adv20")).andExpect(status().isForbidden());
+        verify(documentService, never()).purge(any(), any(), any());
+
+        token("t-soc20", "soc20", "office1", Role.SOCIO_ADMIN, now());
+        profile("soc20", "office1", Role.SOCIO_ADMIN, UserStatus.ACTIVE, null);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/documents/d1")
+                .param("reason", "duplicado").header("Authorization", "Bearer t-soc20")).andExpect(status().isNoContent());
+        verify(documentService).purge(any(), org.mockito.ArgumentMatchers.eq("d1"), org.mockito.ArgumentMatchers.eq("duplicado"));
+    }
+
+    @Test
+    void financeiroSemEditorJuridicoEPortalSemTarefas() throws Exception {
+        token("t-fin20", "fin20", "office1", Role.FINANCEIRO, now());
+        profile("fin20", "office1", Role.FINANCEIRO, UserStatus.ACTIVE, null);
+        mvc.perform(get("/api/legal-editor/documents").header("Authorization", "Bearer t-fin20")).andExpect(status().isForbidden());
+        mvc.perform(get("/api/documents/folders").header("Authorization", "Bearer t-fin20")).andExpect(status().isForbidden());
+        mvc.perform(get("/api/calendar/hearings").param("from", "2026-11-01T00:00:00Z").param("to", "2026-12-01T00:00:00Z")
+                .header("Authorization", "Bearer t-fin20")).andExpect(status().isForbidden());
+
+        token("t-cli20", "cli20", "office1", Role.CLIENTE, now());
+        profile("cli20", "office1", Role.CLIENTE, UserStatus.ACTIVE, null);
+        mvc.perform(get("/api/tasks").header("Authorization", "Bearer t-cli20")).andExpect(status().isForbidden());
+        mvc.perform(get("/api/legal-editor/templates").header("Authorization", "Bearer t-cli20")).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void relatoriosDePrazosEAgendaExigemAcessoARelatorios() throws Exception {
+        token("t-sec20", "sec20", "office1", Role.SECRETARIA, now());
+        profile("sec20", "office1", Role.SECRETARIA, UserStatus.ACTIVE, null);
+        mvc.perform(get("/api/deadlines/report").header("Authorization", "Bearer t-sec20")).andExpect(status().isForbidden());
+        mvc.perform(get("/api/calendar/report").param("from", "2026-11-01T00:00:00Z").param("to", "2026-12-01T00:00:00Z")
+                .header("Authorization", "Bearer t-sec20")).andExpect(status().isForbidden());
+        // secretaria consulta prazos, mas não anexa comprovante (exige DEADLINES_WRITE)
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/deadlines/d1/receipt")
+                .file(new org.springframework.mock.web.MockMultipartFile("file", "c.pdf", "application/pdf", "%PDF-1.4".getBytes()))
+                .header("Authorization", "Bearer t-sec20")).andExpect(status().isForbidden());
     }
 }

@@ -32,6 +32,7 @@ public enum Permission {
     DOCUMENTS_READ("documents", "Consultar e baixar documentos"),
     DOCUMENTS_WRITE("documents", "Enviar e versionar documentos"),
     DOCUMENTS_CONFIDENTIAL("documents", "Acessar documentos sigilosos"),
+    DOCUMENTS_DELETE("documents", "Excluir documentos definitivamente (lixeira)"),
 
     CRIMINAL_READ("criminal", "Acessar departamento criminal"),
     CRIMINAL_WRITE("criminal", "Gerenciar departamento criminal"),

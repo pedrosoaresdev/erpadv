@@ -18,6 +18,18 @@ public class Deadline extends BaseEntity {
     private String clientName;
     private String description;
     private DeadlineType type;
+    private DeadlineOrigin origin;
+    /** Datas da comunicação: disponibilização no DJe, publicação (1º dia útil seguinte) e ciência. */
+    private LocalDate availabilityDate;
+    private LocalDate publicationDate;
+    private LocalDate awarenessDate;
+    /** Comprovante de cumprimento (protocolo), guardado no Storage via backend. */
+    private String receiptPath;
+    private String receiptName;
+    private String receiptContentType;
+    private Long receiptSize;
+    private String receiptSha256;
+    private Instant receiptUploadedAt;
     /** Data da intimação/ciência (início da contagem). */
     private LocalDate startDate;
     private LocalDate dueDate;

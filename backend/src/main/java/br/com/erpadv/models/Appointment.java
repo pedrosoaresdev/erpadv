@@ -32,4 +32,14 @@ public class Appointment extends BaseEntity {
     private List<Integer> reminders = new ArrayList<>();
     private List<Integer> remindersSent = new ArrayList<>();
     private boolean restricted;
+    /** Série de compromissos recorrentes (cada ocorrência é um documento próprio). */
+    private String seriesId;
+    private Integer seriesIndex;
+    private String recurrence;
+    /** Confirmação de presença por integrante: PENDENTE, CONFIRMADO, RECUSADO, TALVEZ. */
+    private java.util.Map<String, String> attendance = new java.util.HashMap<>();
+    private List<AppointmentGuest> guests = new ArrayList<>();
+    private AppointmentStatus status;
+    private String outcome;
+    private Instant statusChangedAt;
 }

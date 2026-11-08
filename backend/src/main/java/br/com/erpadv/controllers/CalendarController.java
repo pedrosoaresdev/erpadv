@@ -30,9 +30,15 @@ public class CalendarController {
     private final CalendarService calendar;
     private final NotificationService notifications;
 
-    public CalendarController(CalendarService calendar, NotificationService notifications) {
+    private final br.com.erpadv.repositories.OfficeRepository offices;
+    private final br.com.erpadv.audit.AuditService audit;
+
+    public CalendarController(CalendarService calendar, NotificationService notifications,
+                              br.com.erpadv.repositories.OfficeRepository offices, br.com.erpadv.audit.AuditService audit) {
         this.calendar = calendar;
         this.notifications = notifications;
+        this.offices = offices;
+        this.audit = audit;
     }
 
     @GetMapping("/api/calendar/events")
@@ -41,8 +47,62 @@ public class CalendarController {
                                       @RequestParam Instant from,
                                       @RequestParam Instant to,
                                       @RequestParam(defaultValue = "false") boolean mine,
+                                      @RequestParam(required = false) String responsibleUid,
                                       @RequestParam(defaultValue = "true") boolean deadlines) {
-        return calendar.events(user, from, to, mine, deadlines);
+        String who = responsibleUid != null && !responsibleUid.isBlank() ? responsibleUid : mine ? user.uid() : null;
+        return calendar.events(user, from, to, who, deadlines);
+    }
+
+    /** Audiências, sessões de julgamento, sustentações orais e perícias (módulo Audiências). */
+    @GetMapping("/api/calendar/hearings")
+    @PreAuthorize("hasAuthority('PERM_CALENDAR_READ')")
+    public List<AppointmentResponse> hearings(@AuthenticationPrincipal AuthenticatedUser user,
+                                              @RequestParam Instant from, @RequestParam Instant to,
+                                              @RequestParam(required = false) String responsibleUid) {
+        return calendar.hearings(user, from, to, responsibleUid);
+    }
+
+    /** Relatório de compromissos ou de audiências (PDF/Excel). */
+    @GetMapping("/api/calendar/report")
+    @PreAuthorize("hasAuthority('PERM_CALENDAR_READ') and hasAuthority('PERM_REPORTS_VIEW')")
+    public org.springframework.http.ResponseEntity<byte[]> report(@AuthenticationPrincipal AuthenticatedUser user,
+                                                                  @RequestParam Instant from, @RequestParam Instant to,
+                                                                  @RequestParam(required = false) String responsibleUid,
+                                                                  @RequestParam(defaultValue = "false") boolean hearings,
+                                                                  @RequestParam(defaultValue = "pdf") String format) {
+        String officeName = offices.findById(user.requireOffice()).map(br.com.erpadv.models.Office::getName).orElse("Escritório");
+        return DashboardController.file(calendar.report(user, from, to, responsibleUid, hearings, format, officeName));
+    }
+
+    @PostMapping("/api/calendar/appointments/{id}/rsvp")
+    @PreAuthorize("hasAuthority('PERM_CALENDAR_READ')")
+    public AppointmentResponse rsvp(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                                    @Valid @RequestBody br.com.erpadv.dto.CalendarDtos.RsvpRequest req) {
+        return calendar.rsvp(user, id, req.status());
+    }
+
+    @PostMapping("/api/calendar/appointments/{id}/status")
+    @PreAuthorize("hasAuthority('PERM_CALENDAR_WRITE')")
+    public AppointmentResponse status(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                                      @Valid @RequestBody br.com.erpadv.dto.CalendarDtos.StatusRequest req) {
+        return calendar.setStatus(user, id, req.status(), req.outcome());
+    }
+
+    /** Exporta o compromisso em iCalendar (.ics) para Google Agenda, Outlook ou Apple Calendar. */
+    @GetMapping("/api/calendar/appointments/{id}/ics")
+    @PreAuthorize("hasAuthority('PERM_CALENDAR_READ')")
+    public org.springframework.http.ResponseEntity<byte[]> ics(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
+        byte[] bytes = calendar.ics(user, id).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        return DashboardController.file(new br.com.erpadv.services.generation.ReportExporter.Exported(bytes,
+                "compromisso.ics", "text/calendar; charset=utf-8"));
+    }
+
+    @GetMapping("/api/calendar/appointments/{id}/history")
+    @PreAuthorize("hasAuthority('PERM_CALENDAR_READ')")
+    public br.com.erpadv.dto.CursorPage<br.com.erpadv.audit.AuditLog> history(@AuthenticationPrincipal AuthenticatedUser user,
+                                                                            @PathVariable String id) {
+        calendar.load(user, id);
+        return audit.list(user.officeId(), "appointment", id, null, null, 30);
     }
 
     @GetMapping("/api/calendar/appointments/{id}")
@@ -62,15 +122,17 @@ public class CalendarController {
     @PutMapping("/api/calendar/appointments/{id}")
     @PreAuthorize("hasAuthority('PERM_CALENDAR_WRITE')")
     public AppointmentResponse update(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
-                                      @Valid @RequestBody AppointmentRequest req) {
-        return calendar.update(user, id, req);
+                                      @Valid @RequestBody AppointmentRequest req,
+                                      @RequestParam(defaultValue = "false") boolean series) {
+        return calendar.update(user, id, req, series);
     }
 
     @DeleteMapping("/api/calendar/appointments/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('PERM_CALENDAR_WRITE')")
-    public void delete(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
-        calendar.delete(user, id);
+    public void delete(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                       @RequestParam(defaultValue = "false") boolean series) {
+        calendar.delete(user, id, series);
     }
 
     /** Registro do token FCM do navegador/dispositivo para notificações push. */

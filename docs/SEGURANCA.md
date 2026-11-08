@@ -22,7 +22,7 @@
 | Validação | Bean Validation em todos os DTOs + validação de CPF/CNPJ/CNJ no front e no back; erros padronizados (RFC 7807) sem stack trace. |
 | Credenciais | Nenhuma credencial administrativa no front ou nas imagens; service account via Docker secret; chaves de desenvolvimento recusadas com `APP_PRODUCTION=true`. |
 | Logs | JSON estruturado com `traceId`, `uid`, `officeId`; logger `AUDIT` dedicado. |
-| Arquivos | Upload só via backend; tipo detectado pela assinatura binária (PDF/DOCX/PNG/JPEG), limites de 10 MB (comprovantes) e 25 MB (documentos), nome sanitizado, SHA-256 por versão; conteúdo servido autenticado com `no-store`/`nosniff`/CSP `sandbox`; cada visualização e download registrados por documento e na auditoria; versões nunca apagadas (arquivamento em vez de exclusão). |
+| Arquivos | Upload só via backend; tipo detectado pela assinatura binária (PDF, PNG, JPEG; DOCX/XLSX/PPTX pelo conteúdo do pacote OOXML; DOC/XLS/PPT pelo contêiner OLE2 + extensão; TXT apenas se for UTF-8 válido sem bytes nulos) — a extensão declarada nunca basta; limites de 10 MB (comprovantes) e 25 MB por padrão para documentos (`DOCUMENTS_MAX_MB`, até 200), nome sanitizado, SHA-256 por versão e aviso de duplicidade; conteúdo servido autenticado com `no-store`/`nosniff`/CSP `sandbox`; cada visualização e download registrados por documento e na auditoria. A lixeira é restaurável; a eliminação definitiva exige a permissão própria `DOCUMENTS_DELETE` (só sócio/administrador por padrão), motivo obrigatório, não vale para documentos de contrato e deixa na auditoria o hash do conteúdo e o número de versões eliminadas. |
 | Sigilo documental | Categorias Inquéritos/Sigilosos sempre sigilosas; documentos sigilosos exigem `DOCUMENTS_CONFIDENTIAL`, documentos de processo criminal exigem `CRIMINAL_READ`; sigilosos nunca liberados ao portal. |
 | Contratos | Honorários de contrato ativo bloqueados para alteração; CPF/CNPJ na minuta apenas para quem tem acesso a dados sensíveis. |
 | Separação patrimonial | Lançamentos pessoais de sócios visíveis apenas ao próprio sócio e excluídos de relatórios do escritório. |
@@ -31,6 +31,9 @@
 | Pesquisa global | Cada categoria respeita a permissão do módulo e o sigilo (processos, prazos e compromissos restritos ocultos sem `CRIMINAL_READ`). |
 | CRM (LGPD) | Minimização: oportunidades não guardam CPF/CNPJ (coletado na conversão, já cifrado no cadastro do cliente); exclusão definitiva disponível ao responsável/sócio (direito de eliminação). |
 | Exportações | CSV com neutralização de injeção de fórmulas (`=`, `+`, `-`, `@`) e registro na auditoria. |
+| Visualizador de PDF | pdf.js carregado sob demanda, com worker servido pela própria aplicação (CSP `script-src 'self'`), `isEvalSupported=false` e XFA desativado; o arquivo chega como Blob autenticado (sem URL pública); a impressão usa imagens renderizadas, sem abrir o PDF fora da sandbox. |
+| Editor Jurídico | HTML saneado por lista de permissões no navegador (colagem do Word) e, de forma definitiva, no servidor (jsoup): sem scripts, eventos, links, imagens ou estilos além de alinhamento/recuo. Valores dos campos automáticos são escapados antes da inserção; CPF/CNPJ/RG completos só para `CLIENTS_SENSITIVE_READ`; documentos ligados a processo sigiloso/criminal herdam `restricted`. Documento finalizado fica bloqueado (reabertura auditada) e toda versão é preservada no histórico. |
+| Compartilhamento interno | Apenas notifica integrantes da equipe com o link; o acesso continua sujeito às permissões e ao sigilo de cada um. |
 
 ## Pendências (próximas etapas)
 

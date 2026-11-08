@@ -65,6 +65,12 @@ import { DocumentsTableComponent } from '../documents/documents-table';
                 @if (auth.has('CASES_WRITE')) {
                   <button mat-menu-item (click)="newCase()"><mat-icon>gavel</mat-icon>Novo processo para o cliente</button>
                 }
+                @if (auth.has('BOARDS_USE')) {
+                  <a mat-menu-item routerLink="/tarefas" [queryParams]="{ clientId: c.id, label: c.name }"><mat-icon>add_task</mat-icon>Tarefas do cliente</a>
+                }
+                @if (auth.has('DOCUMENTS_READ')) {
+                  <a mat-menu-item routerLink="/editor-juridico" [queryParams]="{ clientId: c.id, clientName: c.name }"><mat-icon>edit_document</mat-icon>Documentos no Editor Jurídico</a>
+                }
                 @if (auth.has('CLIENTS_WRITE')) {
                   <button mat-menu-item (click)="toggleDefaulting()">
                     <mat-icon>{{ c.defaulting ? 'task_alt' : 'report' }}</mat-icon>{{ c.defaulting ? 'Remover inadimplência' : 'Marcar como inadimplente' }}

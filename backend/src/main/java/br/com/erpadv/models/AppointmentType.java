@@ -3,8 +3,11 @@ package br.com.erpadv.models;
 public enum AppointmentType {
     AUDIENCIA("Audiência"),
     REUNIAO("Reunião"),
-    CONSULTA("Consulta"),
-    JULGAMENTO("Julgamento"),
+    CONSULTA("Atendimento de cliente"),
+    DESPACHO("Despacho com magistrado"),
+    PERICIA("Perícia"),
+    DILIGENCIA("Diligência"),
+    JULGAMENTO("Sessão de julgamento"),
     SUSTENTACAO_ORAL("Sustentação oral"),
     COMPROMISSO("Compromisso"),
     ATIVIDADE_INTERNA("Atividade interna");

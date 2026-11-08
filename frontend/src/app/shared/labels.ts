@@ -168,6 +168,17 @@ export const DEADLINE_TYPE_LABELS: Record<DeadlineType, string> = {
   OUTRO: 'Outro',
 };
 
+export const ORIGIN_LABELS: Record<import('../core/models/models').DeadlineOrigin, string> = {
+  PUBLICACAO_DJE: 'Publicação no Diário (DJe/DJEN)',
+  INTIMACAO_ELETRONICA: 'Intimação eletrônica',
+  INTIMACAO_PESSOAL: 'Intimação pessoal / oficial',
+  CITACAO: 'Citação',
+  AUDIENCIA: 'Intimação em audiência',
+  DESPACHO: 'Despacho / decisão',
+  CONTRATUAL: 'Contratual / extrajudicial',
+  OUTRO: 'Outra origem',
+};
+
 export const COUNTING_LABELS: Record<CountingMode, string> = {
   UTEIS: 'Dias úteis (CPC)',
   CORRIDOS: 'Dias corridos',
@@ -202,8 +213,11 @@ export const SITUATION_TONE: Record<DeadlineSituation, string> = {
 export const APPOINTMENT_LABELS: Record<AppointmentType, string> = {
   AUDIENCIA: 'Audiência',
   REUNIAO: 'Reunião',
-  CONSULTA: 'Consulta',
-  JULGAMENTO: 'Julgamento',
+  CONSULTA: 'Atendimento de cliente',
+  DESPACHO: 'Despacho com magistrado',
+  PERICIA: 'Perícia',
+  DILIGENCIA: 'Diligência',
+  JULGAMENTO: 'Sessão de julgamento',
   SUSTENTACAO_ORAL: 'Sustentação oral',
   COMPROMISSO: 'Compromisso',
   ATIVIDADE_INTERNA: 'Atividade interna',
@@ -216,9 +230,24 @@ export const EVENT_COLORS: Record<string, string> = {
   SUSTENTACAO_ORAL: '#9b6a12',
   REUNIAO: '#1d4ed8',
   CONSULTA: '#0f766e',
+  DESPACHO: '#6d28d9',
+  PERICIA: '#c2410c',
+  DILIGENCIA: '#0369a1',
   COMPROMISSO: '#4b5563',
   ATIVIDADE_INTERNA: '#64748b',
   DEADLINE: '#c5a46d',
+};
+
+export const APPOINTMENT_STATUS_LABELS: Record<import('../core/models/models').AppointmentStatus, string> = {
+  AGENDADO: 'Agendado',
+  REALIZADO: 'Realizado',
+  REDESIGNADO: 'Redesignado',
+  ADIADO: 'Adiado',
+  CANCELADO: 'Cancelado',
+};
+
+export const RSVP_LABELS: Record<string, string> = {
+  PENDENTE: 'Aguardando resposta', CONFIRMADO: 'Confirmado', RECUSADO: 'Recusou', TALVEZ: 'Talvez',
 };
 
 export const REMINDER_OPTIONS = [

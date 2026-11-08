@@ -12,7 +12,7 @@ Legenda: ✅ concluída · 🟡 parcial · ⏳ pendente
 | 6 | Dashboard executivo (clientes, processos, prazos, audiências, financeiro e contratos) | ✅ |
 | 7 | CRM de clientes (cadastro PF/PJ, pesquisa, inativação, atendimentos, página do cliente) | ✅ |
 | 8 | Gestão processual (cadastro, arquivamento, movimentações, decisões, despachos, linha do tempo, filtros) | ✅ |
-| 9 | Prazos (contagem CPC com feriados, recesso e suspensões; validação pelo advogado; alertas 10/5/3/1/0 dias via notificação e FCM) e agenda (dia/semana/mês, lembretes) | ✅ |
+| 9 | Prazos (contagem CPC com feriados, recesso e suspensões; validação pelo advogado; alertas 10/5/3/1/0 dias via notificação e FCM) e agenda (dia/semana/mês, lembretes) — ampliados na Fase 2 | ✅ |
 | 10 | Financeiro (receber/pagar, parcelamentos, recorrências, baixa com comprovante, fluxo de caixa, projeções, DRE gerencial, inadimplência integrada ao CRM, CSV, finanças pessoais dos sócios) | ✅ |
 | 11 | Contratos/honorários (fixo, parcelado, etapas, êxito, mensal → financeiro), modelos com campos dinâmicos, minuta PDF/DOCX, contrato assinado, histórico; gestão documental (Storage, versões, sigilo, histórico de acesso, pré-visualização) | ✅ |
 | 12 | Departamento criminal (custodiados, inquéritos, cautelares) | ⏳ |
@@ -33,15 +33,20 @@ os dados já cadastrados.
 | Fase | Escopo | Status |
 |---|---|---|
 | 1 — Fundação | Menu final (seção 23) com fases indicadas, navegação mobile (barra inferior, formulários em tela cheia, tabelas em cartões), dashboard executivo ampliado (prazos 3/7/15 dias, suspensos, aguardando movimentação, agenda, tribunal, origem, desempenho da equipe, comparação com período anterior, filtro por advogado, exportação PDF/Excel, atalhos), clientes PF/PJ completos (nacionalidade, inscrições, representante, contatos, origem, duplicidade, exclusão com política de guarda, sem movimentação recente, ficha PDF/Excel, impressão, histórico, exportação, seleção múltipla/ações em lote/colunas), processos avançados (instância, juízo, polos, assuntos secundários, justiça gratuita, fase, OAB, histórico de responsáveis, movimentações importantes, sentença/recurso/suspensão/trânsito, 12 abas, duplicar, excluir arquivado sem vínculos, relatório PDF/Excel, exportação), pesquisa global em todos os módulos, central de notificações | ✅ |
-| 2 — Operação jurídica | Prazos (datas de disponibilização/publicação/ciência, comprovante), audiências e tarefas como módulos próprios, central documental (pastas, lixeira, visualizador PDF avançado), editor jurídico | ⏳ (prazos, agenda, quadros e documentos básicos já existem) |
+| 2 — Operação jurídica | Prazos (origem da comunicação, datas de disponibilização/publicação/ciência com sugestão da publicação no DJe, comprovante de cumprimento, histórico antes/depois, relatório por responsável, filtros por advogado/processo/cliente); agenda (novos tipos, agenda por advogado, recorrência, convidados com confirmação de presença, videoconferência, local, status e resultado, exportação .ics para Google Calendar/Outlook, relatório); módulos **Audiências** e **Tarefas**; central documental (pastas e subpastas, etiquetas, favoritos, renomear/mover/copiar, compartilhamento interno, lixeira com restauração e eliminação definitiva, versões, PDF/DOC/DOCX/XLS/XLSX/PPT/PPTX/JPG/PNG/TXT, envio múltiplo com arrastar e soltar, limite configurável, detecção de duplicidade, visualizador PDF com zoom, páginas, miniaturas, rotação, busca no texto, tela cheia e impressão); **Editor Jurídico** (14 modelos do sistema, modelos do escritório, campos automáticos de cliente/processo/escritório/advogado, cabeçalho/rodapé, numeração de páginas, PDF/DOCX, impressão, histórico de versões, rascunho/final, envio à central) | ✅ |
 | 3 — Gestão empresarial | Honorários (sucumbência, comissões), centros de custo, contas bancárias, cobranças, central de relatórios, etapas do CRM da especificação | ⏳ (financeiro, contratos e CRM já existem) |
 | 4 — Integrações | Central Judicial (DataJud/PJe e demais, somente por interfaces oficiais), DJEN, WhatsApp Business, e-mail, Google Calendar, assinatura eletrônica | ⏳ |
 | 5 — Inteligência e segurança | IA jurídica com fontes verificáveis, automações, OCR, auditoria com antes/depois, 2FA, controle de dispositivos, LGPD (titulares, consentimentos, incidentes) | ⏳ |
 | 6 — Comercialização | Planos e assinatura, licenças, configurações do escritório (logotipo, cabeçalho de documentos), unidades/filiais, monitoramento | 🟡 (multi-tenant, painel master, planos e limite de usuários já existem) |
 
 Pendências conhecidas da Fase 1: filtro do dashboard por **unidade do escritório** depende do cadastro de unidades
-(Fase 6); foto do cliente e pastas de documentos pessoais entram com a central documental (Fase 2); tarefas
-vinculadas ao cliente usam os quadros Kanban até o módulo de Tarefas (Fase 2).
+(Fase 6); foto do cliente ainda não é armazenada.
+
+Pendências conhecidas da Fase 2: OCR de documentos digitalizados e assinatura eletrônica ficam nas Fases 5 e 4,
+como prevê a especificação; sincronização bidirecional com o Google Calendar pela API oficial é da Fase 4 (hoje a
+exportação é por arquivo .ics); convites por e-mail aos convidados externos dependem do e-mail transacional;
+DOC/DOCX/XLS/PPT são baixados para abrir no aplicativo (PDF, imagens e TXT têm visualização integrada); não há
+comparação lado a lado entre versões do editor.
 
 ## O que falta (registrado ao fim desta entrega)
 

@@ -12,8 +12,12 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { catchError, debounceTime, filter, of, switchMap } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
-import { Appointment, AppointmentRequest, AppointmentType, LegalCase } from '../../core/models/models';
-import { APPOINTMENT_LABELS, REMINDER_OPTIONS, enumOptions } from '../../shared/labels';
+import { Appointment, AppointmentRequest, AppointmentStatus, AppointmentType, LegalCase } from '../../core/models/models';
+import { MatMenuModule } from '@angular/material/menu';
+import { ToastService } from '../../core/services/toast.service';
+import { HistoryDialogComponent } from '../../shared/components/history-dialog';
+import { saveBlob } from '../finance/finance.service';
+import { APPOINTMENT_LABELS, APPOINTMENT_STATUS_LABELS, REMINDER_OPTIONS, RSVP_LABELS, enumOptions } from '../../shared/labels';
 import { CasesService } from '../cases/cases.service';
 import { DeadlinesService } from '../deadlines/deadlines.service';
 import { CalendarService } from './calendar.service';
@@ -30,7 +34,7 @@ export interface AppointmentDialogData {
   selector: 'app-appointment-dialog',
   imports: [
     ReactiveFormsModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule,
-    MatIconModule, MatAutocompleteModule, MatSlideToggleModule,
+    MatIconModule, MatAutocompleteModule, MatSlideToggleModule, MatMenuModule,
   ],
   template: `
     <h2 mat-dialog-title class="dialog-title"><mat-icon>{{ a ? 'edit_calendar' : 'event' }}</mat-icon>{{ a ? 'Editar compromisso' : 'Novo compromisso' }}</h2>
@@ -58,6 +62,28 @@ export interface AppointmentDialogData {
         }
         <div class="toggle c2"><mat-slide-toggle formControlName="allDay">Dia inteiro</mat-slide-toggle></div>
         @if (periodError()) { <div class="err">O término deve ser posterior ao início.</div> }
+        @if (!a) {
+          <mat-form-field class="c6">
+            <mat-label>Repetir</mat-label>
+            <mat-select formControlName="recurrence">
+              <mat-option value="">Não repetir</mat-option>
+              <mat-option value="DIARIA">Diariamente</mat-option>
+              <mat-option value="SEMANAL">Semanalmente</mat-option>
+              <mat-option value="QUINZENAL">A cada 2 semanas</mat-option>
+              <mat-option value="MENSAL">Mensalmente</mat-option>
+            </mat-select>
+          </mat-form-field>
+          @if (form.controls.recurrence.value) {
+            <mat-form-field class="c6">
+              <mat-label>Número de ocorrências</mat-label>
+              <input matInput type="number" min="2" max="52" formControlName="occurrences" />
+              <mat-hint>Máximo de 52</mat-hint>
+            </mat-form-field>
+          }
+        } @else if (a.seriesId) {
+          <p class="series c12"><mat-icon inline>repeat</mat-icon> Ocorrência {{ a.seriesIndex }} de uma série recorrente.
+            <label><input type="checkbox" [checked]="applySeries()" (change)="applySeries.set(!applySeries())" /> aplicar alterações às próximas ocorrências</label></p>
+        }
 
         <mat-form-field class="c6">
           <mat-label>Local</mat-label>
@@ -97,11 +123,57 @@ export interface AppointmentDialogData {
           <mat-label>Descrição / pauta</mat-label>
           <textarea matInput rows="3" formControlName="description" maxlength="4000"></textarea>
         </mat-form-field>
+
+        <div class="form-section-title row c12">Convidados externos (cliente, perito, testemunha)
+          <span class="spacer"></span>
+          <button mat-button type="button" (click)="addGuest()" [disabled]="guests().length >= 20"><mat-icon>person_add</mat-icon>Adicionar</button></div>
+        @for (g of guests(); track $index; let i = $index) {
+          <div class="guest c12">
+            <input class="gi" placeholder="Nome" [value]="g.name" (input)="setGuest(i, 'name', $event)" aria-label="Nome do convidado" />
+            <input class="gi" placeholder="E-mail (opcional)" [value]="g.email" (input)="setGuest(i, 'email', $event)" aria-label="E-mail do convidado" />
+            <button mat-icon-button type="button" (click)="removeGuest(i)" aria-label="Remover convidado"><mat-icon>close</mat-icon></button>
+          </div>
+        }
+        @if (guests().length) { <p class="muted small c12">Os convidados recebem o arquivo .ics pelo botão "Exportar"; o envio automático por e-mail chega com a integração de e-mail (Fase 4).</p> }
       </form>
+
+      @if (a) {
+        <div class="form-section-title">Participantes e situação</div>
+        <div class="att">
+          @for (uid of a.responsibleUids; track uid; let i = $index) {
+            <span class="badge" [class.success]="attendance(uid) === 'CONFIRMADO'" [class.danger]="attendance(uid) === 'RECUSADO'">
+              {{ a.responsibleNames[i] }} · {{ rsvpLabels[attendance(uid)] }}
+            </span>
+          }
+        </div>
+        @if (a.responsibleUids.includes(auth.me()?.uid ?? '')) {
+          <div class="row rsvp">
+            <span class="muted small">Sua resposta:</span>
+            <button mat-stroked-button type="button" (click)="rsvp('CONFIRMADO')"><mat-icon>check</mat-icon>Confirmar</button>
+            <button mat-stroked-button type="button" (click)="rsvp('TALVEZ')">Talvez</button>
+            <button mat-stroked-button type="button" (click)="rsvp('RECUSADO')"><mat-icon>close</mat-icon>Recusar</button>
+          </div>
+        }
+        <p class="status"><span class="badge info">{{ a.statusLabel }}</span> @if (a.outcome) { <span class="pre">{{ a.outcome }}</span> }</p>
+      }
     </mat-dialog-content>
     <mat-dialog-actions>
       @if (a && auth.has('CALENDAR_WRITE')) {
         <button mat-button class="danger" type="button" (click)="remove()" [disabled]="saving()"><mat-icon>delete</mat-icon>Excluir</button>
+      }
+      @if (a) {
+        <button mat-button type="button" [matMenuTriggerFor]="moreMenu"><mat-icon>more_horiz</mat-icon>Mais</button>
+        <mat-menu #moreMenu="matMenu">
+          @if (auth.has('CALENDAR_WRITE')) {
+            <button mat-menu-item (click)="changeStatus('REALIZADO')"><mat-icon>task_alt</mat-icon>Marcar como realizado (registrar resultado)</button>
+            <button mat-menu-item (click)="changeStatus('REDESIGNADO')"><mat-icon>event_repeat</mat-icon>Redesignado</button>
+            <button mat-menu-item (click)="changeStatus('ADIADO')"><mat-icon>schedule</mat-icon>Adiado</button>
+            <button mat-menu-item (click)="changeStatus('CANCELADO')"><mat-icon>event_busy</mat-icon>Cancelado</button>
+            <button mat-menu-item (click)="changeStatus('AGENDADO')"><mat-icon>event</mat-icon>Voltar para agendado</button>
+          }
+          <button mat-menu-item (click)="exportIcs()"><mat-icon>event_available</mat-icon>Exportar .ics (Google Agenda/Outlook)</button>
+          <button mat-menu-item (click)="showHistory()"><mat-icon>history</mat-icon>Histórico de alterações</button>
+        </mat-menu>
       }
       <span class="spacer"></span>
       <button mat-button mat-dialog-close type="button">Cancelar</button>
@@ -115,6 +187,16 @@ export interface AppointmentDialogData {
     .toggle { display: flex; align-items: center; height: 56px; }
     .err { grid-column: span 12; color: var(--app-danger); font-size: 13px; margin: -8px 0 12px; }
     .danger { color: var(--app-danger); }
+    .c12 { grid-column: span 12; }
+    .series { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--app-text-muted); margin: -4px 0 12px; }
+    .guest { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+    .gi { flex: 1; min-width: 0; border: 1px solid var(--app-border); border-radius: 8px; padding: 8px 10px; background: var(--app-surface-2); color: var(--app-text); font: inherit; }
+    .small { font-size: 12px; }
+    .att { display: flex; gap: 6px; flex-wrap: wrap; }
+    .rsvp { margin-top: 10px; flex-wrap: wrap; }
+    .status { margin-top: 12px; display: flex; gap: 8px; align-items: flex-start; }
+    .pre { white-space: pre-wrap; font-size: 13px; }
+    mat-dialog-actions { display: flex; flex-wrap: wrap; gap: 6px; }
   `,
 })
 export class AppointmentDialogComponent {
@@ -158,7 +240,66 @@ export class AppointmentDialogComponent {
     responsibleUids: [this.a?.responsibleUids ?? [this.auth.me()?.uid ?? ''].filter(Boolean), Validators.required],
     reminders: [this.a?.reminders ?? [60, 1440]],
     description: [this.a?.description ?? ''],
+    recurrence: [''],
+    occurrences: [4, [Validators.min(2), Validators.max(52)]],
   });
+  readonly guests = signal<{ name: string; email: string }[]>((this.a?.guests ?? []).map((g) => ({ name: g.name, email: g.email ?? '' })));
+  readonly applySeries = signal(false);
+  readonly rsvpLabels = RSVP_LABELS;
+  private readonly toast = inject(ToastService);
+
+  attendance(uid: string): string {
+    return this.a?.attendance?.[uid] ?? 'PENDENTE';
+  }
+
+  addGuest(): void {
+    this.guests.set([...this.guests(), { name: '', email: '' }]);
+  }
+
+  setGuest(i: number, field: 'name' | 'email', event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.guests.set(this.guests().map((g, idx) => (idx === i ? { ...g, [field]: value } : g)));
+  }
+
+  removeGuest(i: number): void {
+    this.guests.set(this.guests().filter((_, idx) => idx !== i));
+  }
+
+  rsvp(status: 'CONFIRMADO' | 'RECUSADO' | 'TALVEZ'): void {
+    if (!this.a) return;
+    this.service.rsvp(this.a.id, status).subscribe((updated) => {
+      this.toast.success('Resposta registrada.');
+      this.ref.close(updated);
+    });
+  }
+
+  changeStatus(status: AppointmentStatus): void {
+    const a = this.a;
+    if (!a) return;
+    const needsText = status === 'REALIZADO' || status === 'REDESIGNADO' || status === 'ADIADO' || status === 'CANCELADO';
+    this.dialog.open(ConfirmDialogComponent, {
+      data: { title: APPOINTMENT_STATUS_LABELS[status], message: a.title, confirmLabel: 'Salvar',
+        reasonLabel: status === 'REALIZADO' ? 'Resultado / ata (ex.: acordo, instrução encerrada)' : 'Observação', reasonRequired: false },
+      width: '520px',
+    }).afterClosed().subscribe((text) => {
+      if (typeof text !== 'string' && text !== true) return;
+      this.service.setStatus(a.id, status, needsText && typeof text === 'string' ? text || null : null).subscribe((u) => {
+        this.toast.success('Situação atualizada.');
+        this.ref.close(u);
+      });
+    });
+  }
+
+  exportIcs(): void {
+    if (!this.a) return;
+    this.service.ics(this.a.id).subscribe((r) => saveBlob(r, 'compromisso.ics'));
+  }
+
+  showHistory(): void {
+    const a = this.a;
+    if (!a) return;
+    this.dialog.open(HistoryDialogComponent, { data: { title: 'Histórico · ' + a.title, load: () => this.service.history(a.id) }, maxWidth: '96vw' });
+  }
 
   constructor() {
     this.caseSearch.valueChanges
@@ -215,9 +356,12 @@ export class AppointmentDialogComponent {
       responsibleUids: v.responsibleUids,
       caseId: this.caseId,
       reminders: v.reminders,
+      guests: this.guests().filter((g) => g.name.trim()).map((g) => ({ name: g.name.trim(), email: g.email.trim() || null })),
+      recurrence: this.a ? null : v.recurrence || null,
+      occurrences: this.a || !v.recurrence ? null : Number(v.occurrences),
     };
     this.saving.set(true);
-    const request = this.a ? this.service.update(this.a.id, body) : this.service.create(body);
+    const request = this.a ? this.service.update(this.a.id, body, this.applySeries()) : this.service.create(body);
     request.subscribe({ next: (saved) => this.ref.close(saved), error: () => this.saving.set(false) });
   }
 
@@ -226,14 +370,14 @@ export class AppointmentDialogComponent {
     if (!a) return;
     this.dialog
       .open(ConfirmDialogComponent, {
-        data: { title: 'Excluir compromisso', message: `“${a.title}” será excluído e os responsáveis serão notificados. A exclusão fica registrada na auditoria.`, confirmLabel: 'Excluir', danger: true },
+        data: { title: 'Excluir compromisso', message: `“${a.title}” será excluído${a.seriesId && this.applySeries() ? ' junto com as próximas ocorrências da série' : ''} e os responsáveis serão notificados. A exclusão fica registrada na auditoria.`, confirmLabel: 'Excluir', danger: true },
         width: '460px',
       })
       .afterClosed()
       .subscribe((ok) => {
         if (!ok) return;
         this.saving.set(true);
-        this.service.delete(a.id).subscribe({ next: () => this.ref.close('deleted'), error: () => this.saving.set(false) });
+        this.service.delete(a.id, !!a.seriesId && this.applySeries()).subscribe({ next: () => this.ref.close('deleted'), error: () => this.saving.set(false) });
       });
   }
 }

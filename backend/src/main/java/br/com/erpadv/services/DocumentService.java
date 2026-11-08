@@ -51,10 +51,21 @@ public class DocumentService {
     private final CaseService cases;
     private final StorageGateway storage;
     private final AuditService audit;
+    private final DocumentRepositories.Folders folders;
+    private final NotificationService notifications;
+    private final br.com.erpadv.repositories.UserRepository users;
+    /** Limite por arquivo (configurável por DOCUMENTS_MAX_MB). */
+    private long maxBytes = MAX_BYTES;
 
     public DocumentService(DocumentRepositories.Documents documents, DocumentRepositories.Versions versions,
                            DocumentRepositories.AccessLogs accessLogs, ClientRepository clients, CaseService cases,
-                           StorageGateway storage, AuditService audit) {
+                           StorageGateway storage, AuditService audit, DocumentRepositories.Folders folders,
+                           NotificationService notifications, br.com.erpadv.repositories.UserRepository users,
+                           @org.springframework.beans.factory.annotation.Value("${app.documents.max-size-mb:25}") long maxSizeMb) {
+        this.folders = folders;
+        this.notifications = notifications;
+        this.users = users;
+        this.maxBytes = Math.max(1, Math.min(maxSizeMb, 200)) * 1024 * 1024;
         this.documents = documents;
         this.versions = versions;
         this.accessLogs = accessLogs;
@@ -65,6 +76,48 @@ public class DocumentService {
     }
 
     public CursorPage<DocumentResponse> list(AuthenticatedUser user, DocumentFilter filter, String cursor, int size) {
+        if (notBlank(filter.folderId()) || filter.favorites() || filter.trash() || notBlank(filter.tag())) {
+            return organized(user, filter);
+        }
+        CursorPage<DocumentResponse> page = basicList(user, filter, cursor, size);
+        // Itens da lixeira ficam fora das listagens (mesmo com "incluir arquivados").
+        return new CursorPage<>(page.items().stream().filter(d -> !d.deleted()).toList(), page.nextCursor());
+    }
+
+    /**
+     * Visões da central documental (pasta, favoritos, lixeira, etiqueta): consulta por um único campo e
+     * filtros de sigilo/arquivamento em memória (até 500 itens por visão).
+     */
+    private CursorPage<DocumentResponse> organized(AuthenticatedUser user, DocumentFilter filter) {
+        String officeId = user.requireOffice();
+        Query q = documents.collection(officeId);
+        if (filter.trash()) {
+            q = q.whereEqualTo("deleted", true);
+        } else if (filter.favorites()) {
+            q = q.whereArrayContains("favoriteUids", user.uid());
+        } else if (notBlank(filter.folderId())) {
+            q = q.whereEqualTo("folderId", filter.folderId());
+        } else {
+            q = q.whereArrayContains("tags", filter.tag().trim().toLowerCase(java.util.Locale.ROOT));
+        }
+        String token = notBlank(filter.search()) ? SearchTokens.queryToken(filter.search()) : null;
+        List<DocumentResponse> items = documents.list(q, 500).stream()
+                .filter(d -> !d.isConfidential() || user.has(Permission.DOCUMENTS_CONFIDENTIAL))
+                .filter(d -> !d.isRestricted() || user.has(Permission.CRIMINAL_READ))
+                .filter(d -> filter.trash() == d.isDeleted())
+                .filter(d -> filter.trash() || filter.includeArchived() || !d.isArchived())
+                .filter(d -> filter.category() == null || filter.category() == d.getCategory())
+                .filter(d -> !notBlank(filter.clientId()) || filter.clientId().equals(d.getClientId()))
+                .filter(d -> !notBlank(filter.caseId()) || filter.caseId().equals(d.getCaseId()))
+                .filter(d -> token == null || d.getSearchTokens().contains(token))
+                .sorted(java.util.Comparator.comparing((StoredDocument d) -> filter.trash() && d.getDeletedAt() != null
+                        ? d.getDeletedAt() : d.getUpdatedAt(), java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))
+                .map(d -> DocumentResponse.of(d, user.uid()))
+                .toList();
+        return new CursorPage<>(items, null);
+    }
+
+    private CursorPage<DocumentResponse> basicList(AuthenticatedUser user, DocumentFilter filter, String cursor, int size) {
         Query q = documents.collection(user.requireOffice());
         if (!user.has(Permission.DOCUMENTS_CONFIDENTIAL)) {
             q = q.whereEqualTo("confidential", false);
@@ -91,11 +144,210 @@ public class DocumentService {
             }
             q = q.whereArrayContains("searchTokens", token);
         }
-        return documents.page(q, "updatedAt", Query.Direction.DESCENDING, cursor, size).map(DocumentResponse::of);
+        return documents.page(q, "updatedAt", Query.Direction.DESCENDING, cursor, size).map(d -> DocumentResponse.of(d, user.uid()));
     }
 
     public DocumentResponse get(AuthenticatedUser user, String id) {
-        return DocumentResponse.of(load(user, id));
+        return DocumentResponse.of(load(user, id), user.uid());
+    }
+
+    // ------------------------------------------------------------------ pastas
+
+    public List<br.com.erpadv.dto.DocumentDtos.FolderResponse> folders(AuthenticatedUser user) {
+        return folders.list(folders.collection(user.requireOffice()).orderBy("nameLower"), 500).stream()
+                .map(f -> new br.com.erpadv.dto.DocumentDtos.FolderResponse(f.getId(), f.getName(), f.getParentId(), f.getColor(), f.getCreatedAt()))
+                .toList();
+    }
+
+    public br.com.erpadv.dto.DocumentDtos.FolderResponse saveFolder(AuthenticatedUser user, String id,
+                                                                  br.com.erpadv.dto.DocumentDtos.FolderRequest req) {
+        String officeId = user.requireOffice();
+        br.com.erpadv.models.DocumentFolder f = id == null ? new br.com.erpadv.models.DocumentFolder()
+                : folders.findById(officeId, id).orElseThrow(() -> new NotFoundException("Pasta"));
+        String parent = notBlank(req.parentId()) ? req.parentId() : null;
+        if (parent != null) {
+            folders.findById(officeId, parent).orElseThrow(() -> new NotFoundException("Pasta superior"));
+            // Impede ciclos (mover a pasta para dentro de si mesma ou de uma subpasta).
+            String cursor = parent;
+            int guard = 0;
+            while (cursor != null && guard++ < 50) {
+                if (cursor.equals(id)) {
+                    throw new BusinessException("FOLDER_CYCLE", "Uma pasta não pode ficar dentro dela mesma.");
+                }
+                cursor = folders.findById(officeId, cursor).map(br.com.erpadv.models.DocumentFolder::getParentId).orElse(null);
+            }
+        }
+        String previousName = f.getName();
+        f.setName(req.name().trim());
+        f.setNameLower(SearchTokens.normalize(req.name()));
+        f.setParentId(parent);
+        f.setColor(notBlank(req.color()) ? req.color() : null);
+        Instant now = Instant.now();
+        if (id == null) {
+            f.setCreatedAt(now);
+            f.setCreatedBy(user.uid());
+        }
+        f.setUpdatedAt(now);
+        f.setUpdatedBy(user.uid());
+        folders.save(officeId, f);
+        audit.record(user, id == null ? "FOLDER_CREATED" : "FOLDER_UPDATED", "folder", f.getId(),
+                (id == null ? "Pasta criada: " : "Pasta atualizada: ") + f.getName(),
+                Map.of("name", (previousName == null ? "" : previousName + "->") + f.getName()));
+        return new br.com.erpadv.dto.DocumentDtos.FolderResponse(f.getId(), f.getName(), f.getParentId(), f.getColor(), f.getCreatedAt());
+    }
+
+    public void deleteFolder(AuthenticatedUser user, String id) {
+        String officeId = user.requireOffice();
+        br.com.erpadv.models.DocumentFolder f = folders.findById(officeId, id).orElseThrow(() -> new NotFoundException("Pasta"));
+        boolean hasChildren = !folders.list(folders.collection(officeId).whereEqualTo("parentId", id), 1).isEmpty();
+        boolean hasDocs = documents.list(documents.collection(officeId).whereEqualTo("folderId", id), 500).stream()
+                .anyMatch(d -> !d.isDeleted());
+        if (hasChildren || hasDocs) {
+            throw new BusinessException("FOLDER_NOT_EMPTY", "Mova ou exclua os documentos e subpastas antes de excluir a pasta.");
+        }
+        folders.delete(officeId, id);
+        audit.record(user, "FOLDER_DELETED", "folder", id, "Pasta excluída: " + f.getName());
+    }
+
+    // ------------------------------------------------------------------ organização e lixeira
+
+    public DocumentResponse move(AuthenticatedUser user, String id, String folderId) {
+        StoredDocument d = load(user, id);
+        String target = notBlank(folderId) ? folderId : null;
+        if (target != null) {
+            folders.findById(user.officeId(), target).orElseThrow(() -> new NotFoundException("Pasta"));
+        }
+        String previous = d.getFolderId();
+        d.setFolderId(target);
+        touch(user, d);
+        documents.save(user.officeId(), d);
+        log(user, d, "MOVE");
+        audit.record(user, "DOCUMENT_MOVED", "document", id, "Documento movido: " + d.getTitle(),
+                Map.of("folder", (previous == null ? "raiz" : previous) + "->" + (target == null ? "raiz" : target)));
+        return DocumentResponse.of(d, user.uid());
+    }
+
+    /** Copia o documento (versão atual) para outra pasta; o histórico de versões não é copiado. */
+    public DocumentResponse copy(AuthenticatedUser user, String id, String folderId) {
+        StoredDocument source = load(user, id);
+        byte[] bytes = storage.get(source.getStoragePath());
+        DocumentMeta meta = new DocumentMeta("Cópia de " + source.getTitle(), source.getDescription(), source.getCategory(),
+                source.getClientId(), source.getCaseId(), source.isConfidential(), false,
+                notBlank(folderId) ? folderId : source.getFolderId(), source.getTags());
+        StoredDocument copy = store(user, meta, bytes, source.getFileName(), source.getContractId());
+        audit.record(user, "DOCUMENT_COPIED", "document", copy.getId(), "Cópia de " + source.getTitle(), Map.of("sourceId", id));
+        return DocumentResponse.of(copy, user.uid());
+    }
+
+    public DocumentResponse favorite(AuthenticatedUser user, String id, boolean on) {
+        StoredDocument d = load(user, id);
+        List<String> favs = new java.util.ArrayList<>(d.getFavoriteUids() == null ? List.of() : d.getFavoriteUids());
+        favs.remove(user.uid());
+        if (on) {
+            favs.add(user.uid());
+        }
+        d.setFavoriteUids(favs);
+        documents.save(user.officeId(), d);
+        return DocumentResponse.of(d, user.uid());
+    }
+
+    /** Envia para a lixeira (restaurável). */
+    public DocumentResponse trash(AuthenticatedUser user, String id) {
+        StoredDocument d = load(user, id);
+        d.setDeleted(true);
+        d.setArchived(true);
+        d.setDeletedAt(Instant.now());
+        d.setDeletedBy(user.uid());
+        d.setDeletedByName(user.displayName());
+        touch(user, d);
+        documents.save(user.officeId(), d);
+        log(user, d, "TRASH");
+        audit.record(user, "DOCUMENT_TRASHED", "document", id, "Documento enviado para a lixeira: " + d.getTitle());
+        return DocumentResponse.of(d, user.uid());
+    }
+
+    public DocumentResponse restore(AuthenticatedUser user, String id) {
+        StoredDocument d = load(user, id);
+        if (!d.isDeleted()) {
+            throw new BusinessException("NOT_IN_TRASH", "O documento não está na lixeira.");
+        }
+        d.setDeleted(false);
+        d.setArchived(false);
+        d.setDeletedAt(null);
+        d.setDeletedBy(null);
+        d.setDeletedByName(null);
+        if (d.getFolderId() != null && folders.findById(user.officeId(), d.getFolderId()).isEmpty()) {
+            d.setFolderId(null);
+        }
+        touch(user, d);
+        documents.save(user.officeId(), d);
+        log(user, d, "RESTORE");
+        audit.record(user, "DOCUMENT_RESTORED", "document", id, "Documento restaurado da lixeira: " + d.getTitle());
+        return DocumentResponse.of(d, user.uid());
+    }
+
+    /**
+     * Eliminação definitiva (somente itens da lixeira): apaga todas as versões no Storage. O registro da
+     * exclusão permanece na trilha de auditoria (quem, quando, hash do conteúdo).
+     */
+    public void purge(AuthenticatedUser user, String id, String reason) {
+        StoredDocument d = load(user, id);
+        if (!d.isDeleted()) {
+            throw new BusinessException("NOT_IN_TRASH", "Envie o documento para a lixeira antes de excluí-lo definitivamente.");
+        }
+        if (d.getContractId() != null) {
+            throw new BusinessException("CONTRACT_DOCUMENT", "Documento vinculado a contrato não pode ser eliminado.");
+        }
+        String officeId = user.officeId();
+        for (DocumentVersion v : versions.list(versions.collection(officeId).whereEqualTo("documentId", id), 200)) {
+            try {
+                storage.delete(v.getStoragePath());
+            } catch (RuntimeException ignored) {
+                // arquivo já ausente no Storage
+            }
+            br.com.erpadv.firebase.Futures.await(versions.collection(officeId).document(v.getId()).delete());
+        }
+        br.com.erpadv.firebase.Futures.await(documents.collection(officeId).document(id).delete());
+        audit.record(user, "DOCUMENT_PURGED", "document", id, "Documento eliminado definitivamente: " + d.getTitle(),
+                Map.of("reason", reason == null ? "" : reason, "sha256", d.getSha256() == null ? "" : d.getSha256(),
+                        "versions", String.valueOf(d.getCurrentVersion())));
+    }
+
+    /** Compartilhamento interno: notifica integrantes (o acesso continua sujeito às permissões de cada um). */
+    public void share(AuthenticatedUser user, String id, List<String> uids, String message) {
+        StoredDocument d = load(user, id);
+        int sent = 0;
+        for (String uid : new LinkedHashSet<>(uids)) {
+            if (uid.equals(user.uid()) || users.findInOffice(user.officeId(), uid).filter(u -> u.getRole() != null && u.getRole().isStaff()).isEmpty()) {
+                continue;
+            }
+            notifications.notify(user.officeId(), uid, "DOCUMENT_SHARED", user.displayName() + " compartilhou um documento",
+                    d.getTitle() + (notBlank(message) ? " — " + message.trim() : ""), "/documentos?doc=" + id);
+            sent++;
+        }
+        log(user, d, "SHARE");
+        audit.record(user, "DOCUMENT_SHARED", "document", id, "Documento compartilhado internamente (" + sent + "): " + d.getTitle());
+    }
+
+    /** Documentos com o mesmo conteúdo (SHA-256), para avisar sobre duplicidade antes do envio. */
+    public List<DocumentResponse> duplicates(AuthenticatedUser user, String sha256) {
+        if (sha256 == null || !sha256.matches("^[0-9a-f]{64}$")) {
+            return List.of();
+        }
+        return documents.list(documents.collection(user.requireOffice()).whereEqualTo("sha256", sha256), 10).stream()
+                .filter(d -> !d.isConfidential() || user.has(Permission.DOCUMENTS_CONFIDENTIAL))
+                .filter(d -> !d.isRestricted() || user.has(Permission.CRIMINAL_READ))
+                .map(d -> DocumentResponse.of(d, user.uid()))
+                .toList();
+    }
+
+    public long maxBytes() {
+        return maxBytes;
+    }
+
+    private void touch(AuthenticatedUser user, StoredDocument d) {
+        d.setUpdatedAt(Instant.now());
+        d.setUpdatedBy(user.uid());
     }
 
     public DocumentResponse upload(AuthenticatedUser user, DocumentMeta meta, byte[] bytes, String originalName) {
@@ -105,7 +357,7 @@ public class DocumentService {
     /** Usado também por contratos (minuta exportada e contrato assinado). */
     StoredDocument store(AuthenticatedUser user, DocumentMeta meta, byte[] bytes, String originalName, String contractId) {
         String officeId = user.requireOffice();
-        FileInspector.Inspection file = FileInspector.inspect(bytes, originalName, MAX_BYTES, ALLOWED);
+        FileInspector.Inspection file = FileInspector.inspect(bytes, originalName, maxBytes, ALLOWED);
         StoredDocument d = new StoredDocument();
         d.setId(documents.collection(officeId).document().getId());
         applyMeta(user, d, meta);
@@ -127,7 +379,7 @@ public class DocumentService {
         if (d.isArchived()) {
             throw new BusinessException("DOCUMENT_ARCHIVED", "Desarquive o documento para enviar nova versão.");
         }
-        FileInspector.Inspection file = FileInspector.inspect(bytes, originalName, MAX_BYTES, ALLOWED);
+        FileInspector.Inspection file = FileInspector.inspect(bytes, originalName, maxBytes, ALLOWED);
         if (file.sha256().equals(d.getSha256())) {
             throw new BusinessException("SAME_CONTENT", "O arquivo enviado é idêntico à versão atual.");
         }
@@ -279,9 +531,22 @@ public class DocumentService {
         d.setRestricted(restricted);
         // Sigilosos nunca são liberados ao portal do cliente.
         d.setSharedWithClient(meta.sharedWithClient() && !confidential && !restricted);
+        if (notBlank(meta.folderId())) {
+            folders.findById(officeId, meta.folderId()).orElseThrow(() -> new NotFoundException("Pasta"));
+            d.setFolderId(meta.folderId());
+        } else if (meta.folderId() != null) {
+            d.setFolderId(null);
+        }
+        if (meta.tags() != null) {
+            d.setTags(meta.tags().stream().filter(DocumentService::notBlank).map(t -> t.trim().toLowerCase(java.util.Locale.ROOT))
+                    .distinct().limit(10).toList());
+        }
         Set<String> tokens = new LinkedHashSet<>(SearchTokens.forText(d.getTitle()));
         tokens.addAll(SearchTokens.forText(d.getDescription()));
         tokens.addAll(SearchTokens.forText(d.getClientName()));
+        if (d.getTags() != null) {
+            d.getTags().forEach(t -> tokens.addAll(SearchTokens.forText(t)));
+        }
         if (d.getCaseNumber() != null) {
             tokens.add("c:" + d.getCaseNumber().replaceAll("\\D", ""));
         }

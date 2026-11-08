@@ -10,8 +10,8 @@ spring:
       fail-on-unknown-properties: false
   servlet:
     multipart:
-      max-file-size: 25MB
-      max-request-size: 30MB
+      max-file-size: ${DOCUMENTS_MAX_MB:25}MB
+      max-request-size: ${DOCUMENTS_MAX_REQUEST_MB:30}MB
 
 server:
   port: ${SERVER_PORT:8085}
@@ -73,6 +73,9 @@ app:
     enabled: ${JOBS_ENABLED:true}
     deadline-alerts-cron: ${DEADLINE_ALERTS_CRON:0 5 * * * *}
     appointment-reminders-ms: ${APPOINTMENT_REMINDERS_MS:300000}
+  documents:
+    # Limite por arquivo enviado à central documental (MB).
+    max-size-mb: ${DOCUMENTS_MAX_MB:25}
   platform:
     # E-mails com acesso ao painel master (desenvolvedor). Separados por vírgula.
     master-emails: ${PLATFORM_MASTER_EMAILS:}

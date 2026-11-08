@@ -489,6 +489,111 @@ public class BoardService {
         return result;
     }
 
+    // ================================================================== tarefas (visão em lista dos cartões)
+
+    static final String TASKS_TEMPLATE = "tarefas";
+
+    /**
+     * Tarefas do escritório: cartões de todos os quadros visíveis, filtráveis por responsável, situação,
+     * cliente e processo. {@code scope} = mine | all; {@code state} = open | done | overdue | all.
+     */
+    public List<MyCard> tasks(AuthenticatedUser user, String scope, String state, String clientId, String caseId) {
+        String officeId = user.requireOffice();
+        com.google.cloud.firestore.Query q = cards.collection(officeId).whereEqualTo("archived", false);
+        if ("mine".equals(scope)) {
+            q = q.whereArrayContains("assigneeUids", user.uid());
+        }
+        if (clientId != null && !clientId.isBlank()) {
+            q = q.whereEqualTo("clientId", clientId);
+        }
+        if (caseId != null && !caseId.isBlank()) {
+            q = q.whereEqualTo("caseId", caseId);
+        }
+        LocalDate today = LocalDate.now(ZONE);
+        Map<String, Board> boardCache = new HashMap<>();
+        List<MyCard> result = new ArrayList<>();
+        for (BoardCard card : cards.list(q, 500)) {
+            String st = state == null ? "open" : state;
+            boolean keep = switch (st) {
+                case "done" -> card.isCompleted();
+                case "overdue" -> !card.isCompleted() && card.getDueDate() != null && card.getDueDate().isBefore(today);
+                case "all" -> true;
+                default -> !card.isCompleted();
+            };
+            if (!keep) {
+                continue;
+            }
+            Board board = boardCache.computeIfAbsent(card.getBoardId(), id -> boards.findById(officeId, id).orElse(null));
+            if (board == null || board.isArchived() || !canView(user, board)) {
+                continue;
+            }
+            String columnName = board.getColumns().stream().filter(c -> c.getId().equals(card.getColumnId()))
+                    .map(BoardColumn::getName).findFirst().orElse("");
+            result.add(new MyCard(card, board.getName(), columnName, board.getColor()));
+        }
+        result.sort(Comparator.comparing((MyCard m) -> m.card().isCompleted())
+                .thenComparing(m -> m.card().getDueDate() == null ? LocalDate.MAX : m.card().getDueDate())
+                .thenComparing(m -> priorityRank(m.card().getPriority())));
+        return result;
+    }
+
+    /** Quadro padrão de tarefas do escritório (criado na primeira tarefa avulsa). */
+    Board defaultTaskBoard(AuthenticatedUser user) {
+        String officeId = user.requireOffice();
+        return boards.list(boards.collection(officeId).whereEqualTo("templateKey", TASKS_TEMPLATE)
+                        .whereEqualTo("archived", false), 1)
+                .stream().findFirst().orElseGet(() -> {
+                    Instant now = Instant.now();
+                    Board board = new Board();
+                    board.setName("Tarefas do escritório");
+                    board.setDescription("Tarefas avulsas criadas pelo módulo Tarefas.");
+                    board.setColor("#2c7a7b");
+                    board.setVisibility("OFFICE");
+                    board.setTemplateKey(TASKS_TEMPLATE);
+                    board.setOwnerUid(user.uid());
+                    board.setOwnerName(user.displayName());
+                    List<BoardColumn> columns = new ArrayList<>();
+                    String[] names = {"A fazer", "Em andamento", "Concluídas"};
+                    for (int i = 0; i < names.length; i++) {
+                        BoardColumn col = new BoardColumn();
+                        col.setId(shortId());
+                        col.setName(names[i]);
+                        col.setDone(i == names.length - 1);
+                        col.setColor(i == names.length - 1 ? "#2e7d32" : null);
+                        columns.add(col);
+                    }
+                    board.setColumns(columns);
+                    board.setLabels(defaultLabels());
+                    board.setCreatedAt(now);
+                    board.setUpdatedAt(now);
+                    board.setCreatedBy(user.uid());
+                    boards.save(officeId, board);
+                    audit.record(user, "BOARD_CREATED", "board", board.getId(), "Quadro padrão de tarefas criado");
+                    return board;
+                });
+    }
+
+    /** Cria uma tarefa avulsa (no quadro informado ou no quadro padrão de tarefas). */
+    public BoardCard createTask(AuthenticatedUser user, String boardId, CardRequest req) {
+        Board board = boardId == null || boardId.isBlank() ? defaultTaskBoard(user) : loadBoard(user, boardId);
+        return createCard(user, board.getId(), req);
+    }
+
+    /** Conclui (move para a coluna de conclusão) ou reabre (volta à primeira coluna aberta) a tarefa. */
+    public BoardCard setTaskDone(AuthenticatedUser user, String cardId, boolean done) {
+        BoardCard card = loadCard(user, cardId);
+        Board board = loadBoard(user, card.getBoardId());
+        BoardColumn target;
+        if (done) {
+            target = board.getColumns().stream().filter(BoardColumn::isDone).findFirst()
+                    .orElseThrow(() -> new BusinessException("NO_DONE_COLUMN",
+                            "O quadro " + board.getName() + " não tem coluna de conclusão."));
+        } else {
+            target = board.getColumns().stream().filter(c -> !c.isDone()).findFirst().orElse(board.getColumns().getFirst());
+        }
+        return move(user, cardId, new MoveRequest(target.getId(), null));
+    }
+
     // ================================================================== indicadores
 
     public BoardInsights insights(AuthenticatedUser user, String boardId) {

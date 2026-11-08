@@ -167,7 +167,9 @@ public class ReminderJobs {
         int count = 0;
         for (QueryDocumentSnapshot doc : docs) {
             Appointment a = mapper.fromSnapshot(doc, Appointment.class);
-            if (a.getOfficeId() == null || a.getReminders() == null || a.getReminders().isEmpty()) {
+            if (a.getOfficeId() == null || a.getReminders() == null || a.getReminders().isEmpty()
+                    || a.getStatus() == br.com.erpadv.models.AppointmentStatus.CANCELADO
+                    || a.getStatus() == br.com.erpadv.models.AppointmentStatus.ADIADO) {
                 continue;
             }
             long minutes = Duration.between(now, a.getStart()).toMinutes();

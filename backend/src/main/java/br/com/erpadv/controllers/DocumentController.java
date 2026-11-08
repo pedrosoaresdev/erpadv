@@ -5,6 +5,10 @@ import br.com.erpadv.dto.DocumentDtos.DocumentFilter;
 import br.com.erpadv.dto.DocumentDtos.DocumentMeta;
 import br.com.erpadv.dto.DocumentDtos.DocumentResponse;
 import br.com.erpadv.dto.DocumentDtos.FileContent;
+import br.com.erpadv.dto.DocumentDtos.FolderRequest;
+import br.com.erpadv.dto.DocumentDtos.FolderResponse;
+import br.com.erpadv.dto.DocumentDtos.MoveRequest;
+import br.com.erpadv.dto.DocumentDtos.ShareRequest;
 import br.com.erpadv.exceptions.BusinessException;
 import br.com.erpadv.models.DocumentAccessLog;
 import br.com.erpadv.models.DocumentCategory;
@@ -19,6 +23,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -53,9 +58,111 @@ public class DocumentController {
                                              @RequestParam(required = false) String clientId,
                                              @RequestParam(required = false) String caseId,
                                              @RequestParam(defaultValue = "false") boolean includeArchived,
+                                             @RequestParam(required = false) String folderId,
+                                             @RequestParam(defaultValue = "false") boolean favorites,
+                                             @RequestParam(defaultValue = "false") boolean trash,
+                                             @RequestParam(required = false) String tag,
                                              @RequestParam(required = false) String cursor,
                                              @RequestParam(defaultValue = "30") int size) {
-        return documents.list(user, new DocumentFilter(search, category, clientId, caseId, includeArchived), cursor, size);
+        return documents.list(user, new DocumentFilter(search, category, clientId, caseId, includeArchived, folderId, favorites,
+                trash, tag), cursor, size);
+    }
+
+    /** Limites e formatos aceitos (para validação prévia no navegador). */
+    @GetMapping("/settings")
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_READ')")
+    public java.util.Map<String, Object> settings() {
+        return java.util.Map.of("maxBytes", documents.maxBytes(),
+                "extensions", List.of("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "jpg", "jpeg", "png", "txt"));
+    }
+
+    /** Documentos já existentes com o mesmo conteúdo (SHA-256 calculado no navegador). */
+    @GetMapping("/duplicates")
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_READ')")
+    public List<DocumentResponse> duplicates(@AuthenticationPrincipal AuthenticatedUser user, @RequestParam String sha256) {
+        return documents.duplicates(user, sha256);
+    }
+
+    @GetMapping("/folders")
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_READ')")
+    public List<FolderResponse> folders(@AuthenticationPrincipal AuthenticatedUser user) {
+        return documents.folders(user);
+    }
+
+    @PostMapping("/folders")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_WRITE')")
+    public FolderResponse createFolder(@AuthenticationPrincipal AuthenticatedUser user, @Valid @RequestBody FolderRequest req) {
+        return documents.saveFolder(user, null, req);
+    }
+
+    @PutMapping("/folders/{id}")
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_WRITE')")
+    public FolderResponse updateFolder(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                                       @Valid @RequestBody FolderRequest req) {
+        return documents.saveFolder(user, id, req);
+    }
+
+    @DeleteMapping("/folders/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_WRITE')")
+    public void deleteFolder(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
+        documents.deleteFolder(user, id);
+    }
+
+    @PostMapping("/{id}/move")
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_WRITE')")
+    public DocumentResponse move(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                                 @Valid @RequestBody MoveRequest req) {
+        return documents.move(user, id, req.folderId());
+    }
+
+    @PostMapping("/{id}/copy")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_WRITE')")
+    public DocumentResponse copy(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                                 @Valid @RequestBody MoveRequest req) {
+        return documents.copy(user, id, req.folderId());
+    }
+
+    @PostMapping("/{id}/favorite")
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_READ')")
+    public DocumentResponse favorite(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
+        return documents.favorite(user, id, true);
+    }
+
+    @DeleteMapping("/{id}/favorite")
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_READ')")
+    public DocumentResponse unfavorite(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
+        return documents.favorite(user, id, false);
+    }
+
+    @PostMapping("/{id}/trash")
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_WRITE')")
+    public DocumentResponse trash(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
+        return documents.trash(user, id);
+    }
+
+    @PostMapping("/{id}/restore")
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_WRITE')")
+    public DocumentResponse restore(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
+        return documents.restore(user, id);
+    }
+
+    /** Eliminação definitiva de item da lixeira (permissão própria). */
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_DELETE')")
+    public void purge(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                      @RequestParam(required = false) String reason) {
+        documents.purge(user, id, reason);
+    }
+
+    @PostMapping("/{id}/share")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_READ')")
+    public void share(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id, @Valid @RequestBody ShareRequest req) {
+        documents.share(user, id, req.uids(), req.message());
     }
 
     @GetMapping("/{id}")
@@ -136,8 +243,9 @@ public class DocumentController {
     }
 
     static byte[] bytes(MultipartFile file) {
-        if (file.getSize() > DocumentService.MAX_BYTES) {
-            throw new BusinessException("FILE_TOO_LARGE", "Arquivo excede o limite de 25 MB.");
+        // Limite absoluto de leitura; o limite configurado de cada módulo é validado no serviço.
+        if (file.getSize() > 200L * 1024 * 1024) {
+            throw new BusinessException("FILE_TOO_LARGE", "Arquivo excede o limite máximo permitido.");
         }
         try {
             return file.getBytes();

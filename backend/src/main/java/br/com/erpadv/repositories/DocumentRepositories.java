@@ -21,6 +21,17 @@ public final class DocumentRepositories {
     }
 
     @Repository
+    public static class Folders extends FirestoreRepository<br.com.erpadv.models.DocumentFolder> {
+        public Folders(Firestore db, FirestoreMapper mapper) {
+            super(db, mapper, br.com.erpadv.models.DocumentFolder.class, "document_folders");
+        }
+
+        public void delete(String officeId, String id) {
+            br.com.erpadv.firebase.Futures.await(collection(officeId).document(id).delete());
+        }
+    }
+
+    @Repository
     public static class Versions extends FirestoreRepository<DocumentVersion> {
         public Versions(Firestore db, FirestoreMapper mapper) {
             super(db, mapper, DocumentVersion.class, "document_versions");

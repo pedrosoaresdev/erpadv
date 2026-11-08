@@ -19,7 +19,7 @@ export type Permission =
   | 'CASES_READ' | 'CASES_WRITE' | 'CASES_ARCHIVE' | 'CASES_DELETE'
   | 'DEADLINES_READ' | 'DEADLINES_WRITE' | 'CALENDAR_READ' | 'CALENDAR_WRITE'
   | 'FINANCE_READ' | 'FINANCE_WRITE' | 'CONTRACTS_READ' | 'CONTRACTS_WRITE'
-  | 'DOCUMENTS_READ' | 'DOCUMENTS_WRITE' | 'DOCUMENTS_CONFIDENTIAL'
+  | 'DOCUMENTS_READ' | 'DOCUMENTS_WRITE' | 'DOCUMENTS_CONFIDENTIAL' | 'DOCUMENTS_DELETE'
   | 'CRIMINAL_READ' | 'CRIMINAL_WRITE' | 'AI_USE' | 'MESSAGES_USE' | 'BOARDS_USE' | 'CRM_USE' | 'REPORTS_VIEW'
   | 'EMPLOYEES_READ' | 'EMPLOYEES_MANAGE' | 'AUDIT_READ' | 'ADMIN_PANEL' | 'SETTINGS_MANAGE'
   | 'PLATFORM_ADMIN' | 'PORTAL_ACCESS';
@@ -413,7 +413,17 @@ export interface Deadline {
   completedByName: string | null;
   restricted: boolean;
   createdAt: string;
+  origin: DeadlineOrigin | null;
+  originLabel: string | null;
+  availabilityDate: string | null;
+  publicationDate: string | null;
+  awarenessDate: string | null;
+  receiptName: string | null;
+  receiptUploadedAt: string | null;
 }
+
+export type DeadlineOrigin = 'PUBLICACAO_DJE' | 'INTIMACAO_ELETRONICA' | 'INTIMACAO_PESSOAL' | 'CITACAO' | 'AUDIENCIA'
+  | 'DESPACHO' | 'CONTRATUAL' | 'OUTRO';
 
 export interface DeadlineRequest {
   caseId?: string | null;
@@ -428,6 +438,10 @@ export interface DeadlineRequest {
   responsibleUid: string;
   priority: DeadlinePriority;
   notes?: string | null;
+  origin?: DeadlineOrigin | null;
+  availabilityDate?: string | null;
+  publicationDate?: string | null;
+  awarenessDate?: string | null;
 }
 
 export interface DeadlineStats {
@@ -464,7 +478,10 @@ export interface CourtCalendar {
 
 // ------------------------------------------------------------------ agenda (Etapa 9)
 export type AppointmentType =
-  | 'AUDIENCIA' | 'REUNIAO' | 'CONSULTA' | 'JULGAMENTO' | 'SUSTENTACAO_ORAL' | 'COMPROMISSO' | 'ATIVIDADE_INTERNA';
+  | 'AUDIENCIA' | 'REUNIAO' | 'CONSULTA' | 'DESPACHO' | 'PERICIA' | 'DILIGENCIA' | 'JULGAMENTO' | 'SUSTENTACAO_ORAL'
+  | 'COMPROMISSO' | 'ATIVIDADE_INTERNA';
+
+export type AppointmentStatus = 'AGENDADO' | 'REALIZADO' | 'REDESIGNADO' | 'ADIADO' | 'CANCELADO';
 
 export interface Appointment {
   id: string;
@@ -485,6 +502,14 @@ export interface Appointment {
   caseNumber: string | null;
   reminders: number[];
   restricted: boolean;
+  seriesId: string | null;
+  seriesIndex: number | null;
+  recurrence: string | null;
+  attendance: Record<string, string> | null;
+  guests: { name: string; email: string | null }[] | null;
+  status: AppointmentStatus;
+  statusLabel: string;
+  outcome: string | null;
 }
 
 export interface AppointmentRequest {
@@ -500,6 +525,9 @@ export interface AppointmentRequest {
   clientId?: string | null;
   caseId?: string | null;
   reminders: number[];
+  guests?: { name: string; email: string | null }[];
+  recurrence?: string | null;
+  occurrences?: number | null;
 }
 
 export interface CalendarEvent {

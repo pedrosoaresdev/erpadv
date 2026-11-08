@@ -15,12 +15,13 @@ import {
   CountingMode,
   Deadline,
   DeadlineCalculation,
+  DeadlineOrigin,
   DeadlinePriority,
   DeadlineRequest,
   DeadlineType,
   LegalCase,
 } from '../../core/models/models';
-import { COUNTING_LABELS, DEADLINE_TYPE_LABELS, PRIORITY_LABELS, enumOptions } from '../../shared/labels';
+import { COUNTING_LABELS, DEADLINE_TYPE_LABELS, ORIGIN_LABELS, PRIORITY_LABELS, enumOptions } from '../../shared/labels';
 import { BrDatePipe } from '../../shared/pipes/format.pipes';
 import { CasesService } from '../cases/cases.service';
 import { DeadlinesService } from './deadlines.service';
@@ -84,6 +85,34 @@ export const todayIso = (): string => {
           @if (form.controls.description.invalid) { <mat-error>Informe a descrição</mat-error> }
         </mat-form-field>
 
+        <div class="form-section-title">Comunicação (origem do prazo)</div>
+        <mat-form-field class="c4">
+          <mat-label>Origem</mat-label>
+          <mat-select formControlName="origin">
+            <mat-option [value]="null">Não informada</mat-option>
+            @for (o of origins; track o.value) { <mat-option [value]="o.value">{{ o.label }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
+        @if (form.controls.origin.value === 'PUBLICACAO_DJE') {
+          <mat-form-field class="c4">
+            <mat-label>Disponibilização no DJe</mat-label>
+            <input matInput type="date" formControlName="availabilityDate" (change)="suggestPublication()" />
+          </mat-form-field>
+          <mat-form-field class="c4">
+            <mat-label>Publicação</mat-label>
+            <input matInput type="date" formControlName="publicationDate" />
+            <mat-hint>1º dia útil após a disponibilização</mat-hint>
+          </mat-form-field>
+        } @else {
+          <mat-form-field class="c4">
+            <mat-label>Data da ciência</mat-label>
+            <input matInput type="date" formControlName="awarenessDate" (change)="useAwareness()" />
+            <mat-hint>Leitura da intimação, audiência, citação…</mat-hint>
+          </mat-form-field>
+        }
+        @if (publicationNote()) { <p class="hint-line"><mat-icon inline>info</mat-icon>{{ publicationNote() }}</p> }
+
+        <div class="form-section-title">Contagem</div>
         <mat-form-field class="c4">
           <mat-label>Data da intimação / início</mat-label>
           <input matInput type="date" formControlName="startDate" />
@@ -171,6 +200,7 @@ export const todayIso = (): string => {
     details { margin-top: 8px; font-size: 13px; }
     summary { cursor: pointer; color: var(--app-text-muted); }
     ul { margin: 6px 0 0; padding-left: 18px; line-height: 1.6; }
+    .hint-line { grid-column: span 12; margin: -6px 0 12px; font-size: 12px; color: var(--app-text-muted); display: flex; gap: 6px; align-items: center; }
     .warn { margin: 10px 0 0; font-size: 12px; color: var(--app-warning); display: flex; gap: 6px; align-items: center; }
   `,
 })
@@ -186,6 +216,8 @@ export class DeadlineFormDialogComponent {
   readonly types = enumOptions(DEADLINE_TYPE_LABELS);
   readonly modes = enumOptions(COUNTING_LABELS);
   readonly priorities = enumOptions(PRIORITY_LABELS);
+  readonly origins = enumOptions(ORIGIN_LABELS);
+  readonly publicationNote = signal<string | null>(null);
   readonly staff = toSignal(this.service.staff(), { initialValue: [] });
   readonly caseOptions = signal<CasePick[]>([]);
   readonly calculation = signal<DeadlineCalculation | null>(null);
@@ -211,6 +243,10 @@ export class DeadlineFormDialogComponent {
     responsibleUid: [this.d?.responsibleUid ?? this.auth.me()?.uid ?? '', Validators.required],
     priority: [this.d?.priority ?? ('MEDIA' as DeadlinePriority), Validators.required],
     notes: [this.d?.notes ?? ''],
+    origin: [(this.d?.origin ?? null) as DeadlineOrigin | null],
+    availabilityDate: [this.d?.availabilityDate ?? ''],
+    publicationDate: [this.d?.publicationDate ?? ''],
+    awarenessDate: [this.d?.awarenessDate ?? ''],
   });
 
   constructor() {
@@ -235,6 +271,27 @@ export class DeadlineFormDialogComponent {
       .pipe(debounceTime(350), takeUntilDestroyed())
       .subscribe(() => this.recalculate());
     this.recalculate();
+  }
+
+  /** Sugere publicação e início da contagem pelo calendário forense (sempre revisável pelo advogado). */
+  suggestPublication(): void {
+    const v = this.form.getRawValue();
+    if (!v.availabilityDate) return;
+    this.service.publicationDate(v.availabilityDate, v.court || null).subscribe({
+      next: (r) => {
+        this.form.patchValue({ publicationDate: r.publicationDate, startDate: r.suggestedStartDate });
+        this.publicationNote.set(r.notes[0] + ' ' + r.notes[1]);
+      },
+      error: () => this.publicationNote.set('Não foi possível sugerir a publicação; informe manualmente.'),
+    });
+  }
+
+  useAwareness(): void {
+    const v = this.form.getRawValue();
+    if (v.awarenessDate) {
+      this.form.controls.startDate.setValue(v.awarenessDate);
+      this.publicationNote.set('Data inicial ajustada para a ciência; a contagem começa no 1º dia útil seguinte.');
+    }
   }
 
   displayCase = (v: CasePick | string | null): string => (typeof v === 'string' ? v : v?.label ?? '');
@@ -280,6 +337,10 @@ export class DeadlineFormDialogComponent {
       responsibleUid: v.responsibleUid,
       priority: v.priority,
       notes: v.notes.trim() || null,
+      origin: v.origin,
+      availabilityDate: v.origin === 'PUBLICACAO_DJE' ? v.availabilityDate || null : null,
+      publicationDate: v.origin === 'PUBLICACAO_DJE' ? v.publicationDate || null : null,
+      awarenessDate: v.origin !== 'PUBLICACAO_DJE' ? v.awarenessDate || null : null,
     };
     this.saving.set(true);
     const request = this.d ? this.service.update(this.d.id, body) : this.service.create(body);

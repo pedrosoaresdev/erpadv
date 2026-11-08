@@ -64,6 +64,12 @@ const TX_STATUS: Record<string, string> = { ABERTO: 'Em aberto', PAGO: 'Pago', C
               <button mat-menu-item (click)="printReport()"><mat-icon>print</mat-icon>Imprimir ficha/relatório</button>
               <button mat-menu-item (click)="downloadReport('pdf')"><mat-icon>picture_as_pdf</mat-icon>Relatório completo (PDF)</button>
               <button mat-menu-item (click)="downloadReport('xlsx')"><mat-icon>table_view</mat-icon>Relatório completo (Excel)</button>
+              @if (auth.has('DOCUMENTS_READ')) {
+                <a mat-menu-item routerLink="/editor-juridico" [queryParams]="{ caseId: p.id, caseLabel: (p.cnjNumber || 'Sem CNJ') + ' · ' + p.clientName }"><mat-icon>edit_document</mat-icon>Peças no Editor Jurídico</a>
+              }
+              @if (auth.has('BOARDS_USE')) {
+                <a mat-menu-item routerLink="/tarefas" [queryParams]="{ caseId: p.id, label: p.cnjNumber || 'processo' }"><mat-icon>add_task</mat-icon>Tarefas do processo</a>
+              }
               @if (auth.has('CASES_WRITE')) {
                 <button mat-menu-item (click)="duplicate()"><mat-icon>content_copy</mat-icon>Duplicar cadastro</button>
               }

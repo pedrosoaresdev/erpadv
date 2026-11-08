@@ -49,10 +49,12 @@ public class DeadlineService {
     private final CourtCalendarService calendar;
     private final AuditService audit;
     private final NotificationService notifications;
+    private final br.com.erpadv.firebase.StorageGateway storage;
 
     public DeadlineService(DeadlineRepository deadlines, CaseService cases, ClientRepository clients,
                            UserRepository users, CourtCalendarService calendar, AuditService audit,
-                           NotificationService notifications) {
+                           NotificationService notifications, br.com.erpadv.firebase.StorageGateway storage) {
+        this.storage = storage;
         this.deadlines = deadlines;
         this.cases = cases;
         this.clients = clients;
@@ -68,7 +70,15 @@ public class DeadlineService {
 
     public CursorPage<DeadlineResponse> list(AuthenticatedUser user, View view, String responsibleUid, String caseId,
                                              String cursor, int size) {
+        return list(user, view, responsibleUid, caseId, null, cursor, size);
+    }
+
+    public CursorPage<DeadlineResponse> list(AuthenticatedUser user, View view, String responsibleUid, String caseId,
+                                             String clientId, String cursor, int size) {
         Query q = baseQuery(user, responsibleUid, caseId);
+        if (clientId != null && !clientId.isBlank()) {
+            q = q.whereEqualTo("clientId", clientId);
+        }
         LocalDate today = today();
         String t = today.toString();
         Query.Direction dir = Query.Direction.ASCENDING;
@@ -140,6 +150,8 @@ public class DeadlineService {
         }
         LocalDate previousDue = d.getDueDate();
         String previousResponsible = d.getResponsibleUid();
+        String previousResponsibleName = d.getResponsibleName();
+        String previousDescription = d.getDescription();
         apply(user, d, req);
         if (!Objects.equals(previousDue, d.getDueDate())) {
             // Nova data exige nova conferência e reabre os alertas.
@@ -151,8 +163,15 @@ public class DeadlineService {
         }
         touch(user, d);
         deadlines.save(user.officeId(), d);
-        audit.record(user, "DEADLINE_UPDATED", "deadline", id, "Prazo atualizado: " + d.getDescription(),
-                Map.of("dueDate", previousDue + "->" + d.getDueDate()));
+        Map<String, String> changes = new java.util.LinkedHashMap<>();
+        changes.put("dueDate", previousDue + "->" + d.getDueDate());
+        if (!Objects.equals(previousResponsible, d.getResponsibleUid())) {
+            changes.put("responsible", previousResponsibleName + "->" + d.getResponsibleName());
+        }
+        if (!Objects.equals(previousDescription, d.getDescription())) {
+            changes.put("description", previousDescription + "->" + d.getDescription());
+        }
+        audit.record(user, "DEADLINE_UPDATED", "deadline", id, "Prazo atualizado: " + d.getDescription(), changes);
         if (!d.getResponsibleUid().equals(previousResponsible)) {
             notifyResponsible(user, d, "Prazo transferido para você");
         }
@@ -315,6 +334,103 @@ public class DeadlineService {
         d.setPriority(req.priority());
         d.setNotes(trim(req.notes()));
         d.setRestricted(restricted);
+        d.setOrigin(req.origin());
+        d.setAvailabilityDate(req.availabilityDate());
+        d.setPublicationDate(req.publicationDate());
+        d.setAwarenessDate(req.awarenessDate());
+        if (req.availabilityDate() != null && req.publicationDate() != null && req.publicationDate().isBefore(req.availabilityDate())) {
+            throw new BusinessException("INVALID_DATES", "A publicação não pode ser anterior à disponibilização.");
+        }
+    }
+
+    /**
+     * Sugere a data de publicação (1º dia útil após a disponibilização no DJe) e a data de início da contagem,
+     * usando o calendário forense do escritório. É sugestão: a contagem continua sujeita à validação humana.
+     */
+    public DeadlineDtos.PublicationDateResponse publicationDate(AuthenticatedUser user, LocalDate availability, String court) {
+        DeadlineCalculator.Result next = calendar.calculator(user.requireOffice(), trim(court))
+                .calculate(availability, 1, CountingMode.UTEIS);
+        LocalDate publication = next.dueDate();
+        return new DeadlineDtos.PublicationDateResponse(availability, publication, publication, List.of(
+                "Publicação considerada no primeiro dia útil seguinte à disponibilização (Lei 11.419/2006, art. 4º, § 3º).",
+                "A contagem do prazo começa no primeiro dia útil seguinte à publicação (art. 4º, § 4º).",
+                "Confira feriados locais e suspensões do tribunal antes de validar."));
+    }
+
+    /** Comprovante de cumprimento (protocolo): PDF, PNG ou JPEG até 10 MB. */
+    public DeadlineResponse attachReceipt(AuthenticatedUser user, String id, byte[] bytes, String originalName) {
+        Deadline d = load(user, id);
+        br.com.erpadv.firebase.FileInspector.Inspection file = br.com.erpadv.firebase.FileInspector.inspect(bytes, originalName,
+                FinanceService.MAX_RECEIPT_BYTES, java.util.EnumSet.of(br.com.erpadv.firebase.FileInspector.FileKind.PDF,
+                        br.com.erpadv.firebase.FileInspector.FileKind.PNG, br.com.erpadv.firebase.FileInspector.FileKind.JPEG));
+        String path = "offices/" + user.officeId() + "/deadlines/" + d.getId() + "/" + java.util.UUID.randomUUID() + "-" + file.safeName();
+        storage.put(path, bytes, file.kind().contentType, Map.of("officeId", user.officeId(), "deadlineId", d.getId(),
+                "uploadedBy", user.uid(), "sha256", file.sha256()));
+        String previous = d.getReceiptPath();
+        d.setReceiptPath(path);
+        d.setReceiptName(file.safeName());
+        d.setReceiptContentType(file.kind().contentType);
+        d.setReceiptSize(file.size());
+        d.setReceiptSha256(file.sha256());
+        d.setReceiptUploadedAt(Instant.now());
+        touch(user, d);
+        deadlines.save(user.officeId(), d);
+        if (previous != null) {
+            try {
+                storage.delete(previous);
+            } catch (RuntimeException ignored) {
+                // comprovante anterior fica órfão; não impede a substituição
+            }
+        }
+        audit.record(user, "DEADLINE_RECEIPT_UPLOADED", "deadline", id, "Comprovante de cumprimento anexado: " + file.safeName(),
+                Map.of("sha256", file.sha256()));
+        return DeadlineResponse.of(d, today());
+    }
+
+    public FinanceService.Receipt downloadReceipt(AuthenticatedUser user, String id) {
+        Deadline d = load(user, id);
+        if (d.getReceiptPath() == null) {
+            throw new NotFoundException("Comprovante");
+        }
+        byte[] bytes = storage.get(d.getReceiptPath());
+        audit.record(user, "DEADLINE_RECEIPT_DOWNLOADED", "deadline", id, "Comprovante baixado: " + d.getReceiptName());
+        return new FinanceService.Receipt(bytes, d.getReceiptName(), d.getReceiptContentType());
+    }
+
+    /** Relatório de prazos por responsável (uma seção por advogado), no período de vencimento informado. */
+    public br.com.erpadv.services.generation.ReportExporter.Exported report(AuthenticatedUser user, LocalDate from, LocalDate to,
+                                                                          String responsibleUid, String format, String officeName) {
+        LocalDate start = from == null ? today().withDayOfMonth(1) : from;
+        LocalDate end = to == null ? start.plusMonths(1).minusDays(1) : to;
+        if (end.isBefore(start)) {
+            throw new BusinessException("INVALID_PERIOD", "Período inválido.");
+        }
+        Query q = baseQuery(user, responsibleUid, null).whereGreaterThanOrEqualTo("dueDate", start.toString())
+                .whereLessThanOrEqualTo("dueDate", end.toString()).orderBy("dueDate");
+        List<Deadline> all = deadlines.list(q, 500);
+        LocalDate today = today();
+        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        Map<String, List<Deadline>> byResponsible = new java.util.TreeMap<>();
+        all.forEach(d -> byResponsible.computeIfAbsent(nullToEmpty(d.getResponsibleName()), k -> new ArrayList<>()).add(d));
+        List<br.com.erpadv.services.generation.ReportExporter.Section> sections = new ArrayList<>();
+        List<List<String>> summary = new ArrayList<>();
+        byResponsible.forEach((name, list) -> {
+            long done = list.stream().filter(d -> d.getStatus() == DeadlineStatus.CONCLUIDO).count();
+            long late = list.stream().filter(d -> d.getStatus() == DeadlineStatus.PENDENTE && d.getDueDate().isBefore(today)).count();
+            long pending = list.stream().filter(d -> d.getStatus() == DeadlineStatus.PENDENTE).count();
+            summary.add(List.of(name, String.valueOf(list.size()), String.valueOf(done), String.valueOf(pending), String.valueOf(late)));
+        });
+        sections.add(br.com.erpadv.services.generation.ReportExporter.Section.table("Resumo por responsável",
+                List.of("Responsável", "Prazos", "Cumpridos", "Pendentes", "Vencidos"), summary));
+        byResponsible.forEach((name, list) -> sections.add(br.com.erpadv.services.generation.ReportExporter.Section.table(
+                name.isBlank() ? "Sem responsável" : name, List.of("Vencimento", "Prazo", "Processo", "Cliente", "Situação", "Validado"),
+                list.stream().map(d -> List.of(d.getDueDate().format(fmt), nullToEmpty(d.getDescription()), nullToEmpty(d.getCaseNumber()),
+                        nullToEmpty(d.getClientName()), DeadlineResponse.of(d, today).situation().name(), d.isValidated() ? "Sim" : "Não")).toList())));
+        audit.record(user, "DEADLINES_REPORT_EXPORTED", "deadline", "*", "Relatório de prazos gerado (" + all.size() + ")",
+                Map.of("from", start.toString(), "to", end.toString()));
+        return br.com.erpadv.services.generation.ReportExporter.export(new br.com.erpadv.services.generation.ReportExporter.Report(
+                "Relatório de prazos por responsável", officeName, "Vencimentos de " + start.format(fmt) + " a " + end.format(fmt)
+                + " · " + all.size() + " prazo(s)", sections, true), format, "prazos-" + start + "-a-" + end);
     }
 
     private void notifyResponsible(AuthenticatedUser actor, Deadline d, String title) {

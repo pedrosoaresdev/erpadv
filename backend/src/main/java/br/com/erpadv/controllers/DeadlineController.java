@@ -40,15 +40,67 @@ public class DeadlineController {
         this.courtCalendar = courtCalendar;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private br.com.erpadv.repositories.OfficeRepository offices;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private br.com.erpadv.audit.AuditService audit;
+
     @GetMapping("/api/deadlines")
     @PreAuthorize("hasAuthority('PERM_DEADLINES_READ')")
     public CursorPage<DeadlineResponse> list(@AuthenticationPrincipal AuthenticatedUser user,
                                              @RequestParam(defaultValue = "PENDENTES") DeadlineService.View view,
                                              @RequestParam(required = false) String responsibleUid,
                                              @RequestParam(required = false) String caseId,
+                                             @RequestParam(required = false) String clientId,
                                              @RequestParam(required = false) String cursor,
                                              @RequestParam(defaultValue = "30") int size) {
-        return deadlines.list(user, view, responsibleUid, caseId, cursor, size);
+        return deadlines.list(user, view, responsibleUid, caseId, clientId, cursor, size);
+    }
+
+    /** Sugestão de data de publicação (1º dia útil após a disponibilização no DJe). */
+    @GetMapping("/api/deadlines/publication-date")
+    @PreAuthorize("hasAuthority('PERM_DEADLINES_READ')")
+    public br.com.erpadv.dto.DeadlineDtos.PublicationDateResponse publicationDate(@AuthenticationPrincipal AuthenticatedUser user,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate availability,
+            @RequestParam(required = false) String court) {
+        return deadlines.publicationDate(user, availability, court);
+    }
+
+    /** Relatório de prazos por responsável (PDF/Excel). */
+    @GetMapping("/api/deadlines/report")
+    @PreAuthorize("hasAuthority('PERM_DEADLINES_READ') and hasAuthority('PERM_REPORTS_VIEW')")
+    public org.springframework.http.ResponseEntity<byte[]> report(@AuthenticationPrincipal AuthenticatedUser user,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to,
+            @RequestParam(required = false) String responsibleUid,
+            @RequestParam(defaultValue = "pdf") String format) {
+        String officeName = offices.findById(user.requireOffice()).map(br.com.erpadv.models.Office::getName).orElse("Escritório");
+        return DashboardController.file(deadlines.report(user, from, to, responsibleUid, format, officeName));
+    }
+
+    @GetMapping("/api/deadlines/{id}/history")
+    @PreAuthorize("hasAuthority('PERM_DEADLINES_READ')")
+    public br.com.erpadv.dto.CursorPage<br.com.erpadv.audit.AuditLog> history(@AuthenticationPrincipal AuthenticatedUser user,
+                                                                            @PathVariable String id,
+                                                                            @RequestParam(required = false) String cursor) {
+        deadlines.load(user, id);
+        return audit.list(user.officeId(), "deadline", id, null, cursor, 30);
+    }
+
+    @PostMapping(value = "/api/deadlines/{id}/receipt", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('PERM_DEADLINES_WRITE')")
+    public DeadlineResponse receipt(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                                    @org.springframework.web.bind.annotation.RequestPart("file") org.springframework.web.multipart.MultipartFile file) {
+        return deadlines.attachReceipt(user, id, DocumentController.bytes(file), file.getOriginalFilename());
+    }
+
+    @GetMapping("/api/deadlines/{id}/receipt")
+    @PreAuthorize("hasAuthority('PERM_DEADLINES_READ')")
+    public org.springframework.http.ResponseEntity<byte[]> downloadReceipt(@AuthenticationPrincipal AuthenticatedUser user,
+                                                                          @PathVariable String id) {
+        var r = deadlines.downloadReceipt(user, id);
+        return DashboardController.file(new br.com.erpadv.services.generation.ReportExporter.Exported(r.bytes(), r.name(), r.contentType()));
     }
 
     @GetMapping("/api/deadlines/stats")

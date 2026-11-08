@@ -39,4 +39,13 @@ public class StoredDocument extends BaseEntity {
     private String uploadedBy;
     private String uploadedByName;
     private List<String> searchTokens = new ArrayList<>();
+    /** Organização: pasta, etiquetas e favoritos (por usuário). */
+    private String folderId;
+    private List<String> tags = new ArrayList<>();
+    private List<String> favoriteUids = new ArrayList<>();
+    /** Lixeira: documento excluído (também arquivado) até ser restaurado ou eliminado definitivamente. */
+    private boolean deleted;
+    private java.time.Instant deletedAt;
+    private String deletedBy;
+    private String deletedByName;
 }

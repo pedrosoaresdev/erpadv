@@ -42,7 +42,23 @@ public final class DeadlineDtos {
             @Size(max = 120) String court,
             @NotBlank @Size(max = 128) String responsibleUid,
             @NotNull DeadlinePriority priority,
-            @Size(max = 4000) String notes) {
+            @Size(max = 4000) String notes,
+            br.com.erpadv.models.DeadlineOrigin origin,
+            LocalDate availabilityDate,
+            LocalDate publicationDate,
+            LocalDate awarenessDate) {
+
+        public DeadlineRequest(String caseId, String clientId, String description, DeadlineType type, LocalDate startDate,
+                               LocalDate dueDate, Integer days, CountingMode countingMode, String court, String responsibleUid,
+                               DeadlinePriority priority, String notes) {
+            this(caseId, clientId, description, type, startDate, dueDate, days, countingMode, court, responsibleUid,
+                    priority, notes, null, null, null, null);
+        }
+    }
+
+    /** Publicação = 1º dia útil seguinte à disponibilização (Lei 11.419/2006, art. 4º, § 3º). */
+    public record PublicationDateResponse(LocalDate availabilityDate, LocalDate publicationDate, LocalDate suggestedStartDate,
+                                          List<String> notes) {
     }
 
     public record DeadlineResponse(
@@ -73,7 +89,14 @@ public final class DeadlineDtos {
             String completedByName,
             boolean restricted,
             Instant createdAt,
-            Instant updatedAt) {
+            Instant updatedAt,
+            br.com.erpadv.models.DeadlineOrigin origin,
+            String originLabel,
+            LocalDate availabilityDate,
+            LocalDate publicationDate,
+            LocalDate awarenessDate,
+            String receiptName,
+            Instant receiptUploadedAt) {
 
         public static DeadlineResponse of(Deadline d, LocalDate today) {
             Long daysLeft = d.getDueDate() == null ? null : ChronoUnit.DAYS.between(today, d.getDueDate());
@@ -82,7 +105,9 @@ public final class DeadlineDtos {
                     d.getDueDate(), d.getDays(), d.getCountingMode(), d.getCourt(), d.getResponsibleUid(),
                     d.getResponsibleName(), d.getPriority(), d.getStatus(), situation(d.getStatus(), daysLeft), daysLeft,
                     d.getNotes(), d.isValidated(), d.getValidatedByName(), d.getValidatedAt(), d.getCompletedAt(),
-                    d.getCompletedByName(), d.isRestricted(), d.getCreatedAt(), d.getUpdatedAt());
+                    d.getCompletedByName(), d.isRestricted(), d.getCreatedAt(), d.getUpdatedAt(), d.getOrigin(),
+                    d.getOrigin() == null ? null : d.getOrigin().label(), d.getAvailabilityDate(), d.getPublicationDate(),
+                    d.getAwarenessDate(), d.getReceiptName(), d.getReceiptUploadedAt());
         }
 
         static Situation situation(DeadlineStatus status, Long daysLeft) {

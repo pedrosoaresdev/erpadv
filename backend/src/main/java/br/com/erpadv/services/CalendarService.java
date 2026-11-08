@@ -63,6 +63,14 @@ public class CalendarService {
     /** Eventos de [from, to): compromissos que começam no intervalo e prazos pendentes/concluídos que vencem nele. */
     public List<CalendarEvent> events(AuthenticatedUser user, Instant from, Instant to, boolean mineOnly,
                                       boolean includeDeadlines) {
+        return events(user, from, to, mineOnly ? user.uid() : null, includeDeadlines);
+    }
+
+    /** Agenda por advogado: {@code responsibleUid} filtra compromissos e prazos de um integrante. */
+    public List<CalendarEvent> events(AuthenticatedUser user, Instant from, Instant to, String responsibleUid,
+                                      boolean includeDeadlines) {
+        boolean mineOnly = responsibleUid != null && !responsibleUid.isBlank();
+        String who = mineOnly ? responsibleUid : null;
         String officeId = user.requireOffice();
         if (from == null || to == null || !to.isAfter(from) || Duration.between(from, to).compareTo(MAX_RANGE) > 0) {
             throw new BusinessException("INVALID_RANGE", "Intervalo inválido (máximo de 62 dias).");
@@ -76,13 +84,14 @@ public class CalendarService {
                 q = q.whereEqualTo("restricted", false);
             }
             if (mineOnly) {
-                q = q.whereArrayContains("responsibleUids", user.uid());
+                q = q.whereArrayContains("responsibleUids", who);
             }
             q = q.whereGreaterThanOrEqualTo("start", from.toEpochMilli()).whereLessThan("start", to.toEpochMilli())
                     .orderBy("start");
             for (Appointment a : appointments.list(q, MAX_ITEMS)) {
                 result.add(new CalendarEvent(a.getId(), "APPOINTMENT", a.getType().name(), a.getType().label(),
-                        a.getTitle(), a.getStart(), a.getEnd(), a.isAllDay(), null, a.getLocation(), a.getCaseId(),
+                        a.getTitle(), a.getStart(), a.getEnd(), a.isAllDay(),
+                        a.getStatus() == null ? null : a.getStatus().name(), a.getLocation(), a.getCaseId(),
                         a.getCaseNumber(), a.getClientName(), a.getResponsibleNames(), null, null));
             }
         }
@@ -95,7 +104,7 @@ public class CalendarService {
                 q = q.whereEqualTo("restricted", false);
             }
             if (mineOnly) {
-                q = q.whereEqualTo("responsibleUid", user.uid());
+                q = q.whereEqualTo("responsibleUid", who);
             }
             q = q.whereIn("status", List.of(DeadlineStatus.PENDENTE.name(), DeadlineStatus.CONCLUIDO.name()))
                     .whereGreaterThanOrEqualTo("dueDate", fromDay.toString())
@@ -119,18 +128,220 @@ public class CalendarService {
 
     public AppointmentResponse create(AuthenticatedUser user, AppointmentRequest req) {
         String officeId = user.requireOffice();
-        Appointment a = new Appointment();
-        apply(user, a, req);
-        Instant now = Instant.now();
-        a.setCreatedAt(now);
-        a.setUpdatedAt(now);
-        a.setCreatedBy(user.uid());
-        a.setUpdatedBy(user.uid());
-        appointments.save(officeId, a);
-        audit.record(user, "APPOINTMENT_CREATED", "appointment", a.getId(),
-                a.getType().label() + ": " + a.getTitle(), Map.of("start", a.getStart().toString()));
-        notifyResponsibles(user, a, a.getResponsibleUids(), "Novo compromisso na sua agenda");
+        int total = req.recurrence() == null || req.recurrence().isBlank() ? 1
+                : Math.max(1, Math.min(52, req.occurrences() == null ? 1 : req.occurrences()));
+        String seriesId = total > 1 ? java.util.UUID.randomUUID().toString() : null;
+        Appointment first = null;
+        for (int i = 0; i < total; i++) {
+            Appointment a = new Appointment();
+            apply(user, a, req);
+            if (i > 0) {
+                a.setStart(shift(req.start(), req.recurrence(), i));
+                a.setEnd(shift(req.end(), req.recurrence(), i));
+            }
+            a.setSeriesId(seriesId);
+            a.setSeriesIndex(seriesId == null ? null : i + 1);
+            a.setRecurrence(seriesId == null ? null : req.recurrence());
+            Instant now = Instant.now();
+            a.setCreatedAt(now);
+            a.setUpdatedAt(now);
+            a.setCreatedBy(user.uid());
+            a.setUpdatedBy(user.uid());
+            appointments.save(officeId, a);
+            if (first == null) {
+                first = a;
+            }
+        }
+        audit.record(user, "APPOINTMENT_CREATED", "appointment", first.getId(),
+                first.getType().label() + ": " + first.getTitle() + (total > 1 ? " (" + total + " ocorrências)" : ""),
+                Map.of("start", first.getStart().toString(), "recurrence", req.recurrence() == null ? "" : req.recurrence()));
+        notifyResponsibles(user, first, first.getResponsibleUids(),
+                total > 1 ? "Nova série de " + total + " compromissos na sua agenda" : "Novo compromisso na sua agenda");
+        return AppointmentResponse.of(first);
+    }
+
+    static Instant shift(Instant base, String recurrence, int n) {
+        java.time.ZonedDateTime z = base.atZone(CourtCalendarService.ZONE);
+        return switch (recurrence) {
+            case "DIARIA" -> z.plusDays(n).toInstant();
+            case "SEMANAL" -> z.plusWeeks(n).toInstant();
+            case "QUINZENAL" -> z.plusWeeks(2L * n).toInstant();
+            case "MENSAL" -> z.plusMonths(n).toInstant();
+            default -> base;
+        };
+    }
+
+    /** Atualiza a ocorrência e, com {@code series}, aplica os dados (exceto datas) às próximas ocorrências da série. */
+    public AppointmentResponse update(AuthenticatedUser user, String id, AppointmentRequest req, boolean series) {
+        AppointmentResponse updated = update(user, id, req);
+        Appointment a = load(user, id);
+        if (series && a.getSeriesId() != null) {
+            for (Appointment o : appointments.list(appointments.collection(user.officeId())
+                    .whereEqualTo("seriesId", a.getSeriesId()), 60)) {
+                if (o.getId().equals(id) || o.getStart().isBefore(a.getStart())) {
+                    continue;
+                }
+                Instant start = o.getStart();
+                Instant end = o.getEnd();
+                apply(user, o, req);
+                o.setStart(start);
+                o.setEnd(end);
+                o.setUpdatedAt(Instant.now());
+                o.setUpdatedBy(user.uid());
+                appointments.save(user.officeId(), o);
+            }
+        }
+        return updated;
+    }
+
+    public void delete(AuthenticatedUser user, String id, boolean series) {
+        Appointment a = load(user, id);
+        if (series && a.getSeriesId() != null) {
+            int removed = 0;
+            for (Appointment o : appointments.list(appointments.collection(user.officeId())
+                    .whereEqualTo("seriesId", a.getSeriesId()), 60)) {
+                if (!o.getStart().isBefore(a.getStart())) {
+                    appointments.delete(user.officeId(), o.getId());
+                    removed++;
+                }
+            }
+            audit.record(user, "APPOINTMENT_SERIES_DELETED", "appointment", id, "Série excluída a partir desta ocorrência: "
+                    + a.getTitle() + " (" + removed + ")", Map.of("start", a.getStart().toString()));
+            notifyResponsibles(user, a, a.getResponsibleUids(), "Série de compromissos cancelada");
+            return;
+        }
+        delete(user, id);
+    }
+
+    /** Confirmação de presença do integrante convidado. */
+    public AppointmentResponse rsvp(AuthenticatedUser user, String id, String status) {
+        Appointment a = load(user, id);
+        if (!a.getResponsibleUids().contains(user.uid())) {
+            throw new ForbiddenException("NOT_INVITED", "Você não está entre os participantes deste compromisso.");
+        }
+        java.util.Map<String, String> attendance = new java.util.HashMap<>(a.getAttendance() == null ? Map.of() : a.getAttendance());
+        attendance.put(user.uid(), status);
+        a.setAttendance(attendance);
+        a.setUpdatedAt(Instant.now());
+        appointments.save(user.officeId(), a);
+        if (a.getCreatedBy() != null && !a.getCreatedBy().equals(user.uid())) {
+            String label = switch (status) { case "CONFIRMADO" -> "confirmou presença"; case "RECUSADO" -> "recusou"; default -> "talvez participe"; };
+            notifications.notify(user.officeId(), a.getCreatedBy(), "APPOINTMENT", user.displayName() + " " + label,
+                    a.getType().label() + ": " + a.getTitle() + " — " + NotificationService.format(a.getStart()), "/agenda?evento=" + a.getId());
+        }
         return AppointmentResponse.of(a);
+    }
+
+    /** Registra a situação (realizado, redesignado, adiado, cancelado) e o resultado — ex.: ata da audiência. */
+    public AppointmentResponse setStatus(AuthenticatedUser user, String id, br.com.erpadv.models.AppointmentStatus status, String outcome) {
+        Appointment a = load(user, id);
+        br.com.erpadv.models.AppointmentStatus previous = a.getStatus() == null ? br.com.erpadv.models.AppointmentStatus.AGENDADO : a.getStatus();
+        a.setStatus(status);
+        a.setOutcome(trim(outcome));
+        a.setStatusChangedAt(Instant.now());
+        a.setUpdatedAt(Instant.now());
+        a.setUpdatedBy(user.uid());
+        appointments.save(user.officeId(), a);
+        audit.record(user, "APPOINTMENT_STATUS_CHANGED", "appointment", id, a.getType().label() + " " + status.label().toLowerCase()
+                + ": " + a.getTitle(), Map.of("status", previous.name() + "->" + status.name()));
+        return AppointmentResponse.of(a);
+    }
+
+    /** Arquivo iCalendar (.ics) do compromisso — importável no Google Agenda, Outlook e Apple Calendar. */
+    public String ics(AuthenticatedUser user, String id) {
+        Appointment a = load(user, id);
+        java.time.format.DateTimeFormatter utc = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
+                .withZone(java.time.ZoneOffset.UTC);
+        StringBuilder sb = new StringBuilder();
+        sb.append("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//ERPAdv//Agenda//PT-BR\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n");
+        sb.append("BEGIN:VEVENT\r\n");
+        sb.append("UID:").append(a.getId()).append("@erpadv\r\n");
+        sb.append("DTSTAMP:").append(utc.format(Instant.now())).append("\r\n");
+        if (a.isAllDay()) {
+            java.time.format.DateTimeFormatter day = java.time.format.DateTimeFormatter.BASIC_ISO_DATE;
+            sb.append("DTSTART;VALUE=DATE:").append(a.getStart().atZone(CourtCalendarService.ZONE).toLocalDate().format(day)).append("\r\n");
+            sb.append("DTEND;VALUE=DATE:").append(a.getEnd().atZone(CourtCalendarService.ZONE).toLocalDate().plusDays(1).format(day)).append("\r\n");
+        } else {
+            sb.append("DTSTART:").append(utc.format(a.getStart())).append("\r\n");
+            sb.append("DTEND:").append(utc.format(a.getEnd())).append("\r\n");
+        }
+        sb.append("SUMMARY:").append(icsText(a.getType().label() + ": " + a.getTitle())).append("\r\n");
+        String description = (a.getCaseNumber() == null ? "" : "Processo " + a.getCaseNumber() + "\n")
+                + (a.getClientName() == null ? "" : "Cliente: " + a.getClientName() + "\n")
+                + (a.getMeetingUrl() == null ? "" : "Videoconferência: " + a.getMeetingUrl() + "\n")
+                + (a.getDescription() == null ? "" : a.getDescription());
+        if (!description.isBlank()) {
+            sb.append("DESCRIPTION:").append(icsText(description)).append("\r\n");
+        }
+        if (a.getLocation() != null) {
+            sb.append("LOCATION:").append(icsText(a.getLocation())).append("\r\n");
+        }
+        if (a.getMeetingUrl() != null) {
+            sb.append("URL:").append(a.getMeetingUrl()).append("\r\n");
+        }
+        sb.append("END:VEVENT\r\nEND:VCALENDAR\r\n");
+        audit.record(user, "APPOINTMENT_ICS_EXPORTED", "appointment", id, "Compromisso exportado (.ics): " + a.getTitle());
+        return sb.toString();
+    }
+
+    static String icsText(String v) {
+        return v.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n");
+    }
+
+    /** Audiências, sessões, sustentações e perícias no período (módulo Audiências). */
+    public List<AppointmentResponse> hearings(AuthenticatedUser user, Instant from, Instant to, String responsibleUid) {
+        String officeId = user.requireOffice();
+        if (from == null || to == null || !to.isAfter(from) || Duration.between(from, to).compareTo(Duration.ofDays(400)) > 0) {
+            throw new BusinessException("INVALID_RANGE", "Intervalo inválido (máximo de 400 dias).");
+        }
+        Query q = appointments.collection(officeId).whereIn("type", List.of(br.com.erpadv.models.AppointmentType.AUDIENCIA.name(),
+                br.com.erpadv.models.AppointmentType.JULGAMENTO.name(), br.com.erpadv.models.AppointmentType.SUSTENTACAO_ORAL.name(),
+                br.com.erpadv.models.AppointmentType.PERICIA.name()));
+        if (!user.has(Permission.CRIMINAL_READ)) {
+            q = q.whereEqualTo("restricted", false);
+        }
+        q = q.whereGreaterThanOrEqualTo("start", from.toEpochMilli()).whereLessThan("start", to.toEpochMilli()).orderBy("start");
+        return appointments.list(q, 500).stream()
+                .filter(a -> responsibleUid == null || responsibleUid.isBlank() || a.getResponsibleUids().contains(responsibleUid))
+                .map(AppointmentResponse::of).toList();
+    }
+
+    /** Relatório de compromissos do período (PDF/Excel). */
+    public br.com.erpadv.services.generation.ReportExporter.Exported report(AuthenticatedUser user, Instant from, Instant to,
+                                                                          String responsibleUid, boolean hearingsOnly, String format,
+                                                                          String officeName) {
+        List<AppointmentResponse> rows;
+        if (hearingsOnly) {
+            rows = hearings(user, from, to, responsibleUid);
+        } else {
+            if (from == null || to == null || !to.isAfter(from) || Duration.between(from, to).compareTo(Duration.ofDays(400)) > 0) {
+                throw new BusinessException("INVALID_RANGE", "Intervalo inválido (máximo de 400 dias).");
+            }
+            Query q = appointments.collection(user.requireOffice());
+            if (!user.has(Permission.CRIMINAL_READ)) {
+                q = q.whereEqualTo("restricted", false);
+            }
+            if (responsibleUid != null && !responsibleUid.isBlank()) {
+                q = q.whereArrayContains("responsibleUids", responsibleUid);
+            }
+            q = q.whereGreaterThanOrEqualTo("start", from.toEpochMilli()).whereLessThan("start", to.toEpochMilli()).orderBy("start");
+            rows = appointments.list(q, 500).stream().map(AppointmentResponse::of).toList();
+        }
+        java.time.format.DateTimeFormatter dt = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(CourtCalendarService.ZONE);
+        java.time.format.DateTimeFormatter d = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(CourtCalendarService.ZONE);
+        List<List<String>> table = rows.stream().map(a -> List.of(dt.format(a.start()), a.typeLabel(), a.title(),
+                a.caseNumber() == null ? "" : a.caseNumber(), a.clientName() == null ? "" : a.clientName(),
+                String.join(", ", a.responsibleNames()), a.location() == null ? "" : a.location(), a.statusLabel(),
+                a.outcome() == null ? "" : a.outcome())).toList();
+        long done = rows.stream().filter(a -> a.status() == br.com.erpadv.models.AppointmentStatus.REALIZADO).count();
+        audit.record(user, "APPOINTMENTS_REPORT_EXPORTED", "appointment", "*", "Relatório de " + (hearingsOnly ? "audiências" : "compromissos")
+                + " (" + rows.size() + ")", Map.of("format", format == null ? "pdf" : format));
+        return br.com.erpadv.services.generation.ReportExporter.export(new br.com.erpadv.services.generation.ReportExporter.Report(
+                hearingsOnly ? "Relatório de audiências" : "Relatório de compromissos", officeName,
+                "Período: " + d.format(from) + " a " + d.format(to.minusSeconds(1)) + " · " + rows.size() + " registro(s), " + done + " realizado(s)",
+                List.of(br.com.erpadv.services.generation.ReportExporter.Section.table(hearingsOnly ? "Audiências" : "Compromissos",
+                        List.of("Data", "Tipo", "Título", "Processo", "Cliente", "Responsáveis", "Local", "Situação", "Resultado"), table)), true),
+                format, hearingsOnly ? "audiencias" : "compromissos");
     }
 
     public AppointmentResponse update(AuthenticatedUser user, String id, AppointmentRequest req) {
@@ -226,6 +437,25 @@ public class CalendarService {
         a.setReminders(req.reminders() == null ? new ArrayList<>()
                 : new ArrayList<>(new LinkedHashSet<>(req.reminders())));
         a.setRestricted(restricted);
+        List<br.com.erpadv.models.AppointmentGuest> guests = new ArrayList<>();
+        if (req.guests() != null) {
+            for (var g : req.guests()) {
+                var guest = new br.com.erpadv.models.AppointmentGuest();
+                guest.setName(g.name().trim());
+                guest.setEmail(g.email() == null || g.email().isBlank() ? null : g.email().trim().toLowerCase());
+                guests.add(guest);
+            }
+        }
+        a.setGuests(guests);
+        java.util.Map<String, String> attendance = new java.util.HashMap<>();
+        for (String uid : uids) {
+            attendance.put(uid, a.getAttendance() == null ? "PENDENTE" : a.getAttendance().getOrDefault(uid,
+                    uid.equals(user.uid()) ? "CONFIRMADO" : "PENDENTE"));
+        }
+        a.setAttendance(attendance);
+        if (a.getStatus() == null) {
+            a.setStatus(br.com.erpadv.models.AppointmentStatus.AGENDADO);
+        }
     }
 
     private void notifyResponsibles(AuthenticatedUser actor, Appointment a, List<String> uids, String title) {

@@ -13,6 +13,12 @@ import { ToastService } from '../../core/services/toast.service';
 import { PageHeaderComponent } from '../../shared/components/ui';
 import { EVENT_COLORS } from '../../shared/labels';
 import { AppointmentDialogComponent } from './appointment-dialog';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { FormsModule } from '@angular/forms';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatSelectModule } from '@angular/material/select';
+import { DeadlinesService } from '../deadlines/deadlines.service';
+import { saveBlob } from '../finance/finance.service';
 import { CalendarService } from './calendar.service';
 import {
   CalendarView,
@@ -34,11 +40,23 @@ const TIME_FMT = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-
 
 @Component({
   selector: 'app-calendar-page',
-  imports: [MatButtonModule, MatButtonToggleModule, MatIconModule, MatProgressBarModule, MatSlideToggleModule, MatTooltipModule, PageHeaderComponent],
+  imports: [MatButtonModule, MatButtonToggleModule, MatIconModule, MatProgressBarModule, MatSlideToggleModule, MatTooltipModule, PageHeaderComponent,
+    MatSelectModule, MatMenuModule, FormsModule],
   template: `
     <div class="page">
       <app-page-header eyebrow="Agenda jurídica" title="Agenda" subtitle="Audiências, julgamentos, reuniões, compromissos e prazos.">
-        <mat-slide-toggle [checked]="mine()" (change)="mine.set($event.checked)">Somente meus</mat-slide-toggle>
+        <mat-slide-toggle [checked]="mine()" (change)="setMine($event.checked)">Somente meus</mat-slide-toggle>
+        <mat-select class="fsel" [ngModel]="lawyer()" (ngModelChange)="setLawyer($event)" placeholder="Agenda de" aria-label="Agenda por advogado">
+          <mat-option value="">Agenda coletiva</mat-option>
+          @for (s of staff(); track s.uid) { <mat-option [value]="s.uid">{{ s.displayName }}</mat-option> }
+        </mat-select>
+        @if (auth.has('REPORTS_VIEW')) {
+          <button mat-stroked-button [matMenuTriggerFor]="reportMenu"><mat-icon>summarize</mat-icon>Relatório</button>
+          <mat-menu #reportMenu="matMenu" xPosition="before">
+            <button mat-menu-item (click)="report('pdf')"><mat-icon>picture_as_pdf</mat-icon>Compromissos do período visível (PDF)</button>
+            <button mat-menu-item (click)="report('xlsx')"><mat-icon>table_view</mat-icon>Compromissos do período visível (Excel)</button>
+          </mat-menu>
+        }
         @if (auth.has('DEADLINES_READ')) {
           <mat-slide-toggle [checked]="showDeadlines()" (change)="showDeadlines.set($event.checked)">Prazos</mat-slide-toggle>
         }
@@ -129,6 +147,7 @@ const TIME_FMT = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-
     </div>
   `,
   styles: `
+    .fsel { width: 200px; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 10px; padding: 8px 12px; box-sizing: border-box; }
     .toolbar { display: flex; align-items: center; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--app-border); flex-wrap: wrap; }
     .title { font-size: 18px; font-weight: 600; margin-left: 8px; }
     .month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
@@ -195,6 +214,8 @@ export class CalendarPageComponent {
   readonly view = signal<CalendarView>(window.innerWidth < 700 ? 'day' : 'month');
   readonly ref = signal(startOfDay(new Date()));
   readonly mine = signal(false);
+  readonly lawyer = signal('');
+  readonly staff = toSignal(inject(DeadlinesService).staff(), { initialValue: [] });
   readonly showDeadlines = signal(true);
   readonly events = signal<CalendarEvent[]>([]);
   readonly loading = signal(false);
@@ -241,11 +262,31 @@ export class CalendarPageComponent {
   load(): void {
     const { from, to } = rangeFor(this.view(), this.ref());
     const mine = this.mine();
+    const lawyer = this.lawyer();
     const deadlines = this.showDeadlines() && this.auth.has('DEADLINES_READ');
     this.loading.set(true);
-    this.service.events(from, to, mine, deadlines).subscribe({
+    this.service.events(from, to, mine, deadlines, lawyer || null).subscribe({
       next: (e) => { this.events.set(e); this.loading.set(false); },
       error: () => this.loading.set(false),
+    });
+  }
+
+  setMine(value: boolean): void {
+    this.mine.set(value);
+    if (value) this.lawyer.set('');
+  }
+
+  setLawyer(uid: string): void {
+    this.lawyer.set(uid);
+    if (uid) this.mine.set(false);
+  }
+
+  report(format: 'pdf' | 'xlsx'): void {
+    const { from, to } = rangeFor(this.view(), this.ref());
+    this.service.report({ from: from.toISOString(), to: to.toISOString(), responsibleUid: this.lawyer() || (this.mine() ? this.auth.me()?.uid : null),
+      hearings: false, format }).subscribe({
+      next: (r) => saveBlob(r, `compromissos.${format}`),
+      error: () => this.toast.error('Não foi possível gerar o relatório.'),
     });
   }
 

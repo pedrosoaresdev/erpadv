@@ -1,4 +1,9 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { FormsModule } from '@angular/forms';
+import { MatSelectModule } from '@angular/material/select';
+import { HistoryDialogComponent } from '../../shared/components/history-dialog';
+import { saveBlob } from '../finance/finance.service';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDialog } from '@angular/material/dialog';
@@ -32,13 +37,23 @@ export function countdownLabel(d: Pick<Deadline, 'situation' | 'daysLeft'>): str
   selector: 'app-deadlines-list',
   imports: [
     RouterLink, MatButtonModule, MatButtonToggleModule, MatIconModule, MatMenuModule, MatProgressBarModule,
-    MatSlideToggleModule, MatTabsModule, MatTooltipModule, PageHeaderComponent, StatCardComponent, EmptyStateComponent,
-    BrDatePipe, CourtCalendarComponent,
+    MatSlideToggleModule, MatTabsModule, MatTooltipModule, MatSelectModule, FormsModule, PageHeaderComponent, StatCardComponent,
+    EmptyStateComponent, BrDatePipe, CourtCalendarComponent,
   ],
   template: `
     <div class="page">
       <app-page-header eyebrow="Controle de prazos" title="Prazos" subtitle="Alertas automáticos 10, 5, 3 e 1 dia antes e no dia do vencimento.">
         <mat-slide-toggle [checked]="mine()" (change)="toggleMine($event.checked)">Somente meus</mat-slide-toggle>
+        <a mat-stroked-button routerLink="/agenda" matTooltip="A agenda mostra os prazos no calendário (dia, semana e mês)"><mat-icon>calendar_month</mat-icon>Calendário</a>
+        @if (auth.has('REPORTS_VIEW')) {
+          <button mat-stroked-button [matMenuTriggerFor]="reportMenu"><mat-icon>summarize</mat-icon>Relatório</button>
+          <mat-menu #reportMenu="matMenu" xPosition="before">
+            <button mat-menu-item (click)="report('pdf', 0)"><mat-icon>picture_as_pdf</mat-icon>Mês atual por responsável (PDF)</button>
+            <button mat-menu-item (click)="report('xlsx', 0)"><mat-icon>table_view</mat-icon>Mês atual por responsável (Excel)</button>
+            <button mat-menu-item (click)="report('pdf', 1)"><mat-icon>picture_as_pdf</mat-icon>Próximo mês (PDF)</button>
+            <button mat-menu-item (click)="report('pdf', -1)"><mat-icon>picture_as_pdf</mat-icon>Mês anterior (PDF)</button>
+          </mat-menu>
+        }
         @if (auth.has('DEADLINES_WRITE')) {
           <button mat-flat-button (click)="create()"><mat-icon>alarm_add</mat-icon>Novo prazo</button>
         }
@@ -58,6 +73,15 @@ export function countdownLabel(d: Pick<Deadline, 'situation' | 'daysLeft'>): str
         <mat-tab label="Prazos">
           <div class="card tab-card">
             <div class="toolbar">
+              <div class="filters">
+                <mat-select class="fsel" [ngModel]="responsible()" (ngModelChange)="setResponsible($event)" placeholder="Responsável" aria-label="Responsável">
+                  <mat-option value="">Todos os responsáveis</mat-option>
+                  @for (s of staff(); track s.uid) { <mat-option [value]="s.uid">{{ s.displayName }}</mat-option> }
+                </mat-select>
+                @if (clientFilter(); as c) {
+                  <span class="chip on">Cliente: {{ c.name }} <button type="button" (click)="setClient(null)" aria-label="Remover filtro de cliente"><mat-icon>close</mat-icon></button></span>
+                }
+              </div>
               <mat-button-toggle-group [value]="view()" (change)="setView($event.value)" hideSingleSelectionIndicator aria-label="Situação">
                 <mat-button-toggle value="PENDENTES">Pendentes</mat-button-toggle>
                 <mat-button-toggle value="HOJE">Hoje</mat-button-toggle>
@@ -84,11 +108,15 @@ export function countdownLabel(d: Pick<Deadline, 'situation' | 'daysLeft'>): str
                         </td>
                         <td>
                           <div class="strong">{{ d.description }}</div>
-                          <div class="muted small">{{ d.typeLabel }} · {{ d.countingMode === 'MANUAL' ? 'data manual' : d.days + ' dias ' + (d.countingMode === 'UTEIS' ? 'úteis' : 'corridos') }}</div>
+                          <div class="muted small">{{ d.typeLabel }} · {{ d.countingMode === 'MANUAL' ? 'data manual' : d.days + ' dias ' + (d.countingMode === 'UTEIS' ? 'úteis' : 'corridos') }}{{ d.originLabel ? ' · ' + d.originLabel : '' }}</div>
+                          @if (d.publicationDate || d.awarenessDate) {
+                            <div class="muted small">{{ d.publicationDate ? 'publicado em ' + (d.publicationDate | brDate) : 'ciência em ' + (d.awarenessDate | brDate) }}</div>
+                          }
+                          @if (d.receiptName) { <div class="small ok"><mat-icon inline>attach_file</mat-icon>comprovante anexado</div> }
                         </td>
                         <td>
                           @if (d.caseId) { <a [routerLink]="['/processos', d.caseId]" class="mono">{{ d.caseNumber || 'Sem CNJ' }}</a> }
-                          <div class="muted small">{{ d.clientName || '—' }}</div>
+                          @if (d.clientId) { <button type="button" class="link small" (click)="setClient({ id: d.clientId, name: d.clientName || 'cliente' })" matTooltip="Filtrar por este cliente">{{ d.clientName }}</button> } @else { <div class="muted small">—</div> }
                         </td>
                         <td>{{ d.responsibleName }}</td>
                         <td><span class="prio" [attr.data-p]="d.priority">{{ priority[d.priority] }}</span></td>
@@ -103,9 +131,14 @@ export function countdownLabel(d: Pick<Deadline, 'situation' | 'daysLeft'>): str
                           }
                         </td>
                         <td class="actions">
-                          @if (auth.has('DEADLINES_WRITE')) {
-                            <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Ações do prazo"><mat-icon>more_vert</mat-icon></button>
-                            <mat-menu #menu="matMenu" xPosition="before">
+                          <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Ações do prazo"><mat-icon>more_vert</mat-icon></button>
+                          <mat-menu #menu="matMenu" xPosition="before">
+                            <button mat-menu-item (click)="history(d)"><mat-icon>history</mat-icon>Histórico de alterações</button>
+                            @if (d.receiptName) {
+                              <button mat-menu-item (click)="downloadReceipt(d)"><mat-icon>download</mat-icon>Baixar comprovante</button>
+                            }
+                            @if (auth.has('DEADLINES_WRITE')) {
+                              <button mat-menu-item (click)="pickReceipt(d)"><mat-icon>attach_file</mat-icon>{{ d.receiptName ? 'Substituir comprovante' : 'Anexar comprovante de cumprimento' }}</button>
                               @if (d.status === 'PENDENTE') {
                                 @if (!d.validated && canValidate(d)) {
                                   <button mat-menu-item (click)="validate(d)"><mat-icon>verified</mat-icon>Validar contagem</button>
@@ -116,8 +149,8 @@ export function countdownLabel(d: Pick<Deadline, 'situation' | 'daysLeft'>): str
                               } @else {
                                 <button mat-menu-item (click)="reopen(d)"><mat-icon>restart_alt</mat-icon>Reabrir</button>
                               }
-                            </mat-menu>
-                          }
+                            }
+                          </mat-menu>
                         </td>
                       </tr>
                     }
@@ -128,10 +161,11 @@ export function countdownLabel(d: Pick<Deadline, 'situation' | 'daysLeft'>): str
             }
           </div>
         </mat-tab>
-        <mat-tab label="Calendário forense">
+        <mat-tab label="Calendário forense (feriados e suspensões)">
           <app-court-calendar />
         </mat-tab>
       </mat-tab-group>
+      <input #receiptInput type="file" accept="application/pdf,image/png,image/jpeg" hidden (change)="uploadReceipt($event)" />
     </div>
   `,
   styles: `
@@ -155,6 +189,14 @@ export function countdownLabel(d: Pick<Deadline, 'situation' | 'daysLeft'>): str
     .actions { text-align: right; width: 56px; }
     tr.highlight td { background: var(--app-gold-soft); }
     .more { display: flex; justify-content: center; padding: 16px; }
+    .toolbar { display: flex; flex-direction: column; gap: 10px; }
+    .filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .fsel { width: 230px; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 10px; padding: 8px 12px; box-sizing: border-box; }
+    .chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--app-gold); background: var(--app-gold-soft); border-radius: 999px; padding: 4px 6px 4px 12px; font-size: 13px; }
+    .chip button { border: 0; background: none; cursor: pointer; display: grid; place-items: center; color: inherit; }
+    .chip mat-icon { font-size: 16px; width: 16px; height: 16px; }
+    .link { border: 0; background: none; padding: 0; color: var(--app-info); cursor: pointer; font: inherit; text-align: left; }
+    .ok { color: var(--app-success); }
   `,
 })
 export class DeadlinesListComponent {
@@ -176,7 +218,58 @@ export class DeadlinesListComponent {
   readonly loading = signal(false);
   readonly stats = signal<DeadlineStats | null>(null);
   readonly highlight = signal<string | null>(this.route.snapshot.queryParamMap.get('id'));
-  private readonly responsibleFilter = computed(() => (this.mine() ? this.auth.me()?.uid : undefined));
+  readonly responsible = signal('');
+  readonly clientFilter = signal<{ id: string; name: string } | null>(null);
+  readonly staff = toSignal(this.service.staff(), { initialValue: [] });
+  private readonly receiptInput = viewChild.required<ElementRef<HTMLInputElement>>('receiptInput');
+  private receiptTarget: Deadline | null = null;
+  private readonly responsibleFilter = computed(() => (this.mine() ? this.auth.me()?.uid : this.responsible() || undefined));
+
+  setResponsible(uid: string): void {
+    this.responsible.set(uid);
+    if (uid) this.mine.set(false);
+    this.refresh();
+  }
+
+  setClient(c: { id: string; name: string } | null): void {
+    this.clientFilter.set(c);
+    this.load(false);
+  }
+
+  history(d: Deadline): void {
+    this.dialog.open(HistoryDialogComponent, {
+      data: { title: 'Histórico · ' + d.description, load: () => this.service.history(d.id) }, maxWidth: '96vw',
+    });
+  }
+
+  pickReceipt(d: Deadline): void {
+    this.receiptTarget = d;
+    this.receiptInput().nativeElement.value = '';
+    this.receiptInput().nativeElement.click();
+  }
+
+  uploadReceipt(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    const d = this.receiptTarget;
+    if (!file || !d) return;
+    this.service.uploadReceipt(d.id, file).subscribe(() => { this.toast.success('Comprovante anexado.'); this.load(false); });
+  }
+
+  downloadReceipt(d: Deadline): void {
+    this.service.receipt(d.id).subscribe((r) => saveBlob(r, d.receiptName ?? 'comprovante'));
+  }
+
+  /** Relatório por responsável do mês (offset: 0 atual, 1 próximo, -1 anterior). */
+  report(format: 'pdf' | 'xlsx', offset: number): void {
+    const now = new Date();
+    const first = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    const last = new Date(now.getFullYear(), now.getMonth() + offset + 1, 0);
+    const iso = (x: Date) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+    this.service.report({ from: iso(first), to: iso(last), responsibleUid: this.responsibleFilter(), format }).subscribe({
+      next: (r) => saveBlob(r, `prazos.${format}`),
+      error: () => this.toast.error('Não foi possível gerar o relatório.'),
+    });
+  }
 
   constructor() {
     this.refresh();
@@ -211,7 +304,7 @@ export class DeadlinesListComponent {
 
   load(more: boolean): void {
     this.loading.set(true);
-    this.service.list(this.view(), { responsibleUid: this.responsibleFilter() }, more ? this.cursor() : null).subscribe({
+    this.service.list(this.view(), { responsibleUid: this.responsibleFilter(), clientId: this.clientFilter()?.id }, more ? this.cursor() : null).subscribe({
       next: (page) => {
         this.items.set(more ? [...this.items(), ...page.items] : page.items);
         this.cursor.set(page.nextCursor);
@@ -265,7 +358,7 @@ export class DeadlinesListComponent {
       .afterClosed()
       .subscribe((note) => {
         if (typeof note === 'string') {
-          this.service.complete(d.id, note || null).subscribe(() => { this.toast.success('Prazo concluído.'); this.refresh(); });
+          this.service.complete(d.id, note || null).subscribe(() => { this.toast.success('Prazo concluído. Anexe o comprovante de protocolo pelo menu do prazo.'); this.refresh(); });
         }
       });
   }
