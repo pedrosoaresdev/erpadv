@@ -34,14 +34,26 @@ public final class CalendarDtos {
             @Size(max = 20) List<@jakarta.validation.Valid GuestRequest> guests,
             /** Somente na criação: DIARIA, SEMANAL, QUINZENAL ou MENSAL, com o número total de ocorrências. */
             @Pattern(regexp = "^$|^(DIARIA|SEMANAL|QUINZENAL|MENSAL)$", message = "Recorrência inválida") String recurrence,
-            @Min(1) @Max(52) Integer occurrences) {
+            @Min(1) @Max(52) Integer occurrences,
+            br.com.erpadv.models.MeetingPlatform meetingPlatform) {
 
         public AppointmentRequest(AppointmentType type, String title, Instant start, Instant end, boolean allDay, String location,
                                   String meetingUrl, String description, List<String> responsibleUids, String clientId,
                                   String caseId, List<Integer> reminders) {
             this(type, title, start, end, allDay, location, meetingUrl, description, responsibleUids, clientId, caseId,
-                    reminders, null, null, null);
+                    reminders, null, null, null, null);
         }
+
+        public AppointmentRequest(AppointmentType type, String title, Instant start, Instant end, boolean allDay, String location,
+                                  String meetingUrl, String description, List<String> responsibleUids, String clientId,
+                                  String caseId, List<Integer> reminders, List<GuestRequest> guests, String recurrence,
+                                  Integer occurrences) {
+            this(type, title, start, end, allDay, location, meetingUrl, description, responsibleUids, clientId, caseId,
+                    reminders, guests, recurrence, occurrences, null);
+        }
+    }
+
+    public record MinutesRequest(@Size(max = 20000) String minutes) {
     }
 
     public record GuestRequest(@NotBlank @Size(max = 120) String name, @jakarta.validation.constraints.Email @Size(max = 150) String email) {
@@ -80,7 +92,12 @@ public final class CalendarDtos {
             List<br.com.erpadv.models.AppointmentGuest> guests,
             br.com.erpadv.models.AppointmentStatus status,
             String statusLabel,
-            String outcome) {
+            String outcome,
+            br.com.erpadv.models.MeetingPlatform meetingPlatform,
+            String meetingPlatformLabel,
+            String minutes,
+            Instant minutesUpdatedAt,
+            String minutesByName) {
 
         public static AppointmentResponse of(Appointment a) {
             return new AppointmentResponse(a.getId(), a.getType(), a.getType() == null ? null : a.getType().label(),
@@ -90,7 +107,12 @@ public final class CalendarDtos {
                     a.getCreatedAt(), a.getSeriesId(), a.getSeriesIndex(), a.getRecurrence(), a.getAttendance(), a.getGuests(),
                     a.getStatus() == null ? br.com.erpadv.models.AppointmentStatus.AGENDADO : a.getStatus(),
                     (a.getStatus() == null ? br.com.erpadv.models.AppointmentStatus.AGENDADO : a.getStatus()).label(),
-                    a.getOutcome());
+                    a.getOutcome(), platform(a), platform(a) == null ? null : platform(a).label(), a.getMinutes(),
+                    a.getMinutesUpdatedAt(), a.getMinutesByName());
+        }
+
+        private static br.com.erpadv.models.MeetingPlatform platform(Appointment a) {
+            return a.getMeetingPlatform() != null ? a.getMeetingPlatform() : br.com.erpadv.models.MeetingPlatform.fromUrl(a.getMeetingUrl());
         }
     }
 

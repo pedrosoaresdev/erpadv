@@ -15,7 +15,7 @@ import { ClientSummary, LegalCase } from '../../core/models/models';
 import { BoardsService } from '../boards/boards.service';
 import { CasesService } from '../cases/cases.service';
 import { ClientsService } from '../clients/clients.service';
-import { KIND_LABELS, LegalDocKind, LegalEditorService, LegalTemplate } from './legal-editor.service';
+import { KIND_LABELS, LegalDocKind, LegalEditorService, LegalTemplate, Letterhead } from './legal-editor.service';
 import { RichTextEditorComponent } from './rich-text-editor';
 
 export interface NewDocumentData {
@@ -75,6 +75,14 @@ type Option = { id: string; label: string };
           </mat-select>
         </mat-form-field>
         <mat-form-field class="c6">
+          <mat-label>Papel timbrado</mat-label>
+          <mat-select [(ngModel)]="letterheadId">
+            <mat-option value="">Folha em branco</mat-option>
+            @for (l of letterheads(); track l.id) { <mat-option [value]="l.id">{{ l.name }}{{ l.isDefault ? ' (padrão)' : '' }}</mat-option> }
+          </mat-select>
+          @if (!letterheads().length) { <mat-hint>Cadastre em “Papel timbrado” na tela do editor</mat-hint> }
+        </mat-form-field>
+        <mat-form-field class="c6">
           <mat-label>Título (opcional)</mat-label>
           <input matInput [(ngModel)]="title" maxlength="200" placeholder="Gerado a partir do tipo e do cliente" />
         </mat-form-field>
@@ -120,10 +128,16 @@ export class NewLegalDocumentDialogComponent {
   caseId: string | null = this.data.legalCase?.id ?? null;
   lawyerUid: string | null = null;
   title = '';
+  letterheadId = '';
+  readonly letterheads = signal<Letterhead[]>([]);
   readonly clientSearch = new FormControl<Option | string>(this.data.client ? { id: this.data.client.id, label: this.data.client.name } : '');
   readonly caseSearch = new FormControl<Option | string>(this.data.legalCase ?? '');
 
   constructor() {
+    this.service.letterheads().pipe(catchError(() => of([] as Letterhead[]))).subscribe((list) => {
+      this.letterheads.set(list);
+      this.letterheadId = list.find((l) => l.isDefault)?.id ?? '';
+    });
     this.clientSearch.valueChanges.pipe(
       debounceTime(250), filter((v): v is string => typeof v === 'string'),
       switchMap((term) => {
@@ -152,7 +166,8 @@ export class NewLegalDocumentDialogComponent {
     const id = this.templateId();
     if (!id) return;
     this.saving.set(true);
-    this.service.create({ title: this.title.trim() || null, kind: null, templateId: id, clientId: this.clientId, caseId: this.caseId, lawyerUid: this.lawyerUid })
+    this.service.create({ title: this.title.trim() || null, kind: null, templateId: id, clientId: this.clientId, caseId: this.caseId, lawyerUid: this.lawyerUid,
+      letterheadId: this.letterheadId })
       .subscribe({ next: (d) => this.ref.close(d), error: () => this.saving.set(false) });
   }
 }

@@ -28,6 +28,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Prazos', icon: 'alarm', route: '/prazos', permission: 'DEADLINES_READ' },
       { label: 'Agenda', icon: 'calendar_month', route: '/agenda', permission: 'CALENDAR_READ' },
       { label: 'Audiências', icon: 'record_voice_over', route: '/audiencias', permission: 'CALENDAR_READ' },
+      { label: 'Reuniões', icon: 'video_call', route: '/reunioes', permission: 'CALENDAR_READ' },
       { label: 'Tarefas', icon: 'task_alt', route: '/tarefas', permission: 'BOARDS_USE' },
       { label: 'Quadros Kanban', icon: 'view_kanban', route: '/quadros', permission: 'BOARDS_USE' },
       { label: 'CRM', icon: 'filter_alt', route: '/crm', permission: 'CRM_USE' },

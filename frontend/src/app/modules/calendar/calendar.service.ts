@@ -11,6 +11,14 @@ export class CalendarService {
     return this.api.get('/calendar/events', { from: from.toISOString(), to: to.toISOString(), mine, deadlines, responsibleUid });
   }
 
+  meetings(from: Date, to: Date, responsibleUid?: string | null): Observable<Appointment[]> {
+    return this.api.get('/calendar/meetings', { from: from.toISOString(), to: to.toISOString(), responsibleUid });
+  }
+
+  saveMinutes(id: string, minutes: string | null): Observable<Appointment> {
+    return this.api.put(`/calendar/appointments/${encodeURIComponent(id)}/minutes`, { minutes });
+  }
+
   hearings(from: Date, to: Date, responsibleUid?: string | null): Observable<Appointment[]> {
     return this.api.get('/calendar/hearings', { from: from.toISOString(), to: to.toISOString(), responsibleUid });
   }

@@ -295,14 +295,42 @@ public final class HtmlDocument {
 
     // ------------------------------------------------------------------ PDF
 
-    public record Layout(String header, String footer, boolean pageNumbers) {
+    /**
+     * Papel timbrado: imagem A4 (PNG/JPEG) e, opcionalmente, o PDF original (página 1, vetorial no PDF).
+     * Margens em milímetros delimitam a área de texto.
+     */
+    public record Background(byte[] image, byte[] pdf, int marginTop, int marginBottom, int marginLeft, int marginRight) {
+    }
+
+    public record Layout(String header, String footer, boolean pageNumbers, Background background) {
+        public Layout(String header, String footer, boolean pageNumbers) {
+            this(header, footer, pageNumbers, null);
+        }
+    }
+
+    private static float mm(int value) {
+        return value * 72f / 25.4f;
     }
 
     public static byte[] toPdf(String html, Layout layout) {
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             boolean hasHeader = layout.header() != null && !layout.header().isBlank();
-            Document doc = new Document(PageSize.A4, 85, 57, hasHeader ? 90 : 72, 72);
+            Background bg = layout.background();
+            Document doc = bg == null ? new Document(PageSize.A4, 85, 57, hasHeader ? 90 : 72, 72)
+                    : new Document(PageSize.A4, mm(bg.marginLeft()), mm(bg.marginRight()),
+                    mm(bg.marginTop()) + (hasHeader ? 18 : 0), mm(bg.marginBottom()) + 6);
             PdfWriter writer = PdfWriter.getInstance(doc, out);
+            com.lowagie.text.pdf.PdfImportedPage bgPage = null;
+            com.lowagie.text.Image bgImage = null;
+            if (bg != null && bg.pdf() != null) {
+                bgPage = writer.getImportedPage(new com.lowagie.text.pdf.PdfReader(bg.pdf()), 1);
+            } else if (bg != null && bg.image() != null) {
+                bgImage = com.lowagie.text.Image.getInstance(bg.image());
+                bgImage.scaleAbsolute(PageSize.A4.getWidth(), PageSize.A4.getHeight());
+                bgImage.setAbsolutePosition(0, 0);
+            }
+            final com.lowagie.text.pdf.PdfImportedPage backgroundPage = bgPage;
+            final com.lowagie.text.Image backgroundImage = bgImage;
             BaseFont regular = BaseFont.createFont(BaseFont.TIMES_ROMAN, BaseFont.CP1252, false);
             BaseFont bold = BaseFont.createFont(BaseFont.TIMES_BOLD, BaseFont.CP1252, false);
             BaseFont italic = BaseFont.createFont(BaseFont.TIMES_ITALIC, BaseFont.CP1252, false);
@@ -318,22 +346,40 @@ public final class HtmlDocument {
                 }
 
                 @Override
+                public void onStartPage(PdfWriter w, Document d) {
+                    try {
+                        PdfContentByte under = w.getDirectContentUnder();
+                        if (backgroundPage != null) {
+                            float sx = PageSize.A4.getWidth() / backgroundPage.getWidth();
+                            float sy = PageSize.A4.getHeight() / backgroundPage.getHeight();
+                            under.addTemplate(backgroundPage, sx, 0, 0, sy, 0, 0);
+                        } else if (backgroundImage != null) {
+                            under.addImage(backgroundImage);
+                        }
+                    } catch (DocumentException e) {
+                        throw new IllegalStateException("Falha ao aplicar o papel timbrado", e);
+                    }
+                }
+
+                @Override
                 public void onEndPage(PdfWriter w, Document d) {
                     PdfContentByte cb = w.getDirectContent();
                     float center = (d.left() + d.right()) / 2;
                     if (hasHeader) {
                         String[] lines = layout.header().split("\\r?\\n");
-                        float y = d.top() + 22 + (lines.length - 1) * 11;
+                        float y = d.top() + (bg == null ? 22 : 8) + (lines.length - 1) * 11;
                         for (String line : lines) {
                             ColumnText.showTextAligned(cb, Element.ALIGN_CENTER, new Phrase(line, small), center, y, 0);
                             y -= 11;
                         }
-                        cb.setLineWidth(0.4f);
-                        cb.moveTo(d.left(), d.top() + 12);
-                        cb.lineTo(d.right(), d.top() + 12);
-                        cb.stroke();
+                        if (bg == null) {
+                            cb.setLineWidth(0.4f);
+                            cb.moveTo(d.left(), d.top() + 12);
+                            cb.lineTo(d.right(), d.top() + 12);
+                            cb.stroke();
+                        }
                     }
-                    float y = d.bottom() - 30;
+                    float y = bg == null ? d.bottom() - 30 : d.bottom() - 14;
                     if (layout.footer() != null && !layout.footer().isBlank()) {
                         for (String line : layout.footer().split("\\r?\\n")) {
                             ColumnText.showTextAligned(cb, Element.ALIGN_CENTER, new Phrase(line, small), center, y, 0);
@@ -344,8 +390,9 @@ public final class HtmlDocument {
                         String label = "Página " + w.getPageNumber() + " de ";
                         float width = regular.getWidthPoint(label, 9);
                         float x = d.right() - width - 18;
-                        ColumnText.showTextAligned(cb, Element.ALIGN_LEFT, new Phrase(label, small), x, d.bottom() - 48, 0);
-                        cb.addTemplate(total, x + width, d.bottom() - 48);
+                        float py = bg == null ? d.bottom() - 48 : Math.max(10, d.bottom() - 26);
+                        ColumnText.showTextAligned(cb, Element.ALIGN_LEFT, new Phrase(label, small), x, py, 0);
+                        cb.addTemplate(total, x + width, py);
                     }
                 }
 
@@ -461,12 +508,22 @@ public final class HtmlDocument {
             size.setW(BigInteger.valueOf(11906));
             size.setH(BigInteger.valueOf(16838));
             CTPageMar mar = sect.isSetPgMar() ? sect.getPgMar() : sect.addNewPgMar();
-            mar.setLeft(BigInteger.valueOf(1701));
-            mar.setRight(BigInteger.valueOf(1134));
-            mar.setTop(BigInteger.valueOf(1417));
-            mar.setBottom(BigInteger.valueOf(1417));
+            Background bg = layout.background();
+            mar.setLeft(BigInteger.valueOf(bg == null ? 1701 : twips(bg.marginLeft())));
+            mar.setRight(BigInteger.valueOf(bg == null ? 1134 : twips(bg.marginRight())));
+            mar.setTop(BigInteger.valueOf(bg == null ? 1417 : twips(bg.marginTop())));
+            mar.setBottom(BigInteger.valueOf(bg == null ? 1417 : twips(bg.marginBottom())));
+            if (bg != null) {
+                mar.setHeader(BigInteger.valueOf(0));
+                mar.setFooter(BigInteger.valueOf(0));
+            }
+            XWPFHeader bgHeader = null;
+            if (bg != null && bg.image() != null) {
+                bgHeader = doc.createHeader(HeaderFooterType.DEFAULT);
+                backgroundPicture(bgHeader.createParagraph(), bg.image());
+            }
             if (layout.header() != null && !layout.header().isBlank()) {
-                XWPFHeader header = doc.createHeader(HeaderFooterType.DEFAULT);
+                XWPFHeader header = bgHeader != null ? bgHeader : doc.createHeader(HeaderFooterType.DEFAULT);
                 boolean first = true;
                 for (String line : layout.header().split("\\r?\\n")) {
                     XWPFParagraph p = first ? header.createParagraph() : header.createParagraph();
@@ -527,6 +584,39 @@ public final class HtmlDocument {
             return out.toByteArray();
         } catch (IOException e) {
             throw new IllegalStateException("Falha ao gerar DOCX", e);
+        }
+    }
+
+    private static long twips(int mm) {
+        return Math.round(mm * 1440 / 25.4);
+    }
+
+    /** Imagem A4 ancorada atrás do texto, no cabeçalho (repete em todas as páginas). */
+    private static void backgroundPicture(XWPFParagraph p, byte[] image) {
+        try {
+            int type = image.length > 3 && (image[0] & 0xFF) == 0x89 ? org.apache.poi.xwpf.usermodel.Document.PICTURE_TYPE_PNG
+                    : org.apache.poi.xwpf.usermodel.Document.PICTURE_TYPE_JPEG;
+            XWPFRun run = p.createRun();
+            long cx = org.apache.poi.util.Units.toEMU(PageSize.A4.getWidth());
+            long cy = org.apache.poi.util.Units.toEMU(PageSize.A4.getHeight());
+            run.addPicture(new java.io.ByteArrayInputStream(image), type, "papel-timbrado", (int) cx, (int) cy);
+            var drawing = run.getCTR().getDrawingArray(0);
+            var inline = drawing.getInlineArray(0);
+            String graphic = inline.getGraphic().xmlText();
+            String xml = "<wp:anchor xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" "
+                    + "xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\" "
+                    + "simplePos=\"0\" relativeHeight=\"0\" behindDoc=\"1\" locked=\"1\" layoutInCell=\"1\" allowOverlap=\"1\">"
+                    + "<wp:simplePos x=\"0\" y=\"0\"/>"
+                    + "<wp:positionH relativeFrom=\"page\"><wp:posOffset>0</wp:posOffset></wp:positionH>"
+                    + "<wp:positionV relativeFrom=\"page\"><wp:posOffset>0</wp:posOffset></wp:positionV>"
+                    + "<wp:extent cx=\"" + cx + "\" cy=\"" + cy + "\"/><wp:effectExtent l=\"0\" t=\"0\" r=\"0\" b=\"0\"/><wp:wrapNone/>"
+                    + "<wp:docPr id=\"" + inline.getDocPr().getId() + "\" name=\"Papel timbrado\"/><wp:cNvGraphicFramePr/>"
+                    + "<a:graphic>" + graphic + "</a:graphic></wp:anchor>";
+            var anchor = org.openxmlformats.schemas.drawingml.x2006.wordprocessingDrawing.CTAnchor.Factory.parse(xml);
+            drawing.setAnchorArray(new org.openxmlformats.schemas.drawingml.x2006.wordprocessingDrawing.CTAnchor[]{anchor});
+            drawing.removeInline(0);
+        } catch (Exception e) {
+            throw new IllegalStateException("Falha ao aplicar o papel timbrado no DOCX", e);
         }
     }
 

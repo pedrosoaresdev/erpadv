@@ -26,6 +26,17 @@ public final class LegalEditorRepositories {
     }
 
     @Repository
+    public static class Letterheads extends FirestoreRepository<br.com.erpadv.models.Letterhead> {
+        public Letterheads(Firestore db, FirestoreMapper mapper) {
+            super(db, mapper, br.com.erpadv.models.Letterhead.class, "letterheads");
+        }
+
+        public void delete(String officeId, String id) {
+            Futures.await(collection(officeId).document(id).delete());
+        }
+    }
+
+    @Repository
     public static class Drafts extends FirestoreRepository<LegalDraft> {
         public Drafts(Firestore db, FirestoreMapper mapper) {
             super(db, mapper, LegalDraft.class, "legal_documents");

@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
@@ -12,7 +12,8 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { catchError, debounceTime, filter, of, switchMap } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
-import { Appointment, AppointmentRequest, AppointmentStatus, AppointmentType, LegalCase } from '../../core/models/models';
+import { Appointment, AppointmentRequest, AppointmentStatus, AppointmentType, LegalCase, MeetingPlatform } from '../../core/models/models';
+import { MEETING_PLATFORMS, linkMatches, platformInfo } from './meeting-platforms';
 import { MatMenuModule } from '@angular/material/menu';
 import { ToastService } from '../../core/services/toast.service';
 import { HistoryDialogComponent } from '../../shared/components/history-dialog';
@@ -27,6 +28,9 @@ export interface AppointmentDialogData {
   appointment?: Appointment | null;
   date?: Date;
   legalCase?: { id: string; cnjNumber: string | null; clientName: string } | null;
+  /** Nova reunião: tipo e plataforma pré-selecionados. */
+  type?: AppointmentType;
+  platform?: MeetingPlatform;
 }
 
 /** Resultado: compromisso salvo ou 'deleted'. */
@@ -90,10 +94,26 @@ export interface AppointmentDialogData {
           <input matInput formControlName="location" placeholder="Fórum, sala, endereço" />
         </mat-form-field>
         <mat-form-field class="c6">
-          <mat-label>Link da sala virtual</mat-label>
-          <input matInput formControlName="meetingUrl" placeholder="https://" />
-          @if (form.controls.meetingUrl.invalid) { <mat-error>Use um link https://</mat-error> }
+          <mat-label>Plataforma</mat-label>
+          <mat-select formControlName="meetingPlatform">
+            <mat-option value="">Sem videoconferência</mat-option>
+            @for (p of platforms; track p.key) { <mat-option [value]="p.key"><mat-icon>{{ p.icon }}</mat-icon>{{ p.label }}</mat-option> }
+          </mat-select>
         </mat-form-field>
+        @if (form.controls.meetingPlatform.value && form.controls.meetingPlatform.value !== 'PRESENCIAL') {
+          <mat-form-field class="c6">
+            <mat-label>Link da sala ({{ platformLabel() }})</mat-label>
+            <input matInput formControlName="meetingUrl" placeholder="https://" />
+            @if (form.controls.meetingUrl.hasError('pattern')) { <mat-error>Use um link https://</mat-error> }
+            @else if (form.controls.meetingUrl.hasError('platform')) { <mat-error>O link não é do {{ platformLabel() }}</mat-error> }
+          </mat-form-field>
+          @if (createInfo(); as c) {
+            <p class="c6 platform-help muted small">
+              <button mat-stroked-button type="button" (click)="openCreate(c.createUrl!)"><mat-icon>open_in_new</mat-icon>{{ c.createLabel }}</button>
+              Crie a sala na sua conta e cole aqui o link gerado.
+            </p>
+          }
+        }
 
         <mat-form-field class="c6">
           <mat-label>Responsáveis</mat-label>
@@ -185,6 +205,7 @@ export interface AppointmentDialogData {
   styles: `
     mat-dialog-content { max-height: 74vh; }
     .toggle { display: flex; align-items: center; height: 56px; }
+    .platform-help { grid-column: span 12; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -6px 0 12px; font-size: 12px; }
     .err { grid-column: span 12; color: var(--app-danger); font-size: 13px; margin: -8px 0 12px; }
     .danger { color: var(--app-danger); }
     .c12 { grid-column: span 12; }
@@ -229,7 +250,7 @@ export class AppointmentDialogComponent {
   private readonly endRef = this.a ? new Date(this.a.end) : new Date(this.startRef.getTime() + 3_600_000);
 
   readonly form = inject(FormBuilder).nonNullable.group({
-    type: [this.a?.type ?? ((this.data?.legalCase ? 'AUDIENCIA' : 'REUNIAO') as AppointmentType), Validators.required],
+    type: [this.a?.type ?? this.data?.type ?? ((this.data?.legalCase ? 'AUDIENCIA' : 'REUNIAO') as AppointmentType), Validators.required],
     title: [this.a?.title ?? '', [Validators.required, Validators.maxLength(200)]],
     date: [toLocalDateInput(this.startRef), Validators.required],
     startTime: [toLocalTimeInput(this.startRef)],
@@ -237,6 +258,7 @@ export class AppointmentDialogComponent {
     allDay: [this.a?.allDay ?? false],
     location: [this.a?.location ?? ''],
     meetingUrl: [this.a?.meetingUrl ?? '', Validators.pattern(/^$|^https:\/\/.+/)],
+    meetingPlatform: [(this.a?.meetingPlatform ?? this.data?.platform ?? '') as MeetingPlatform | ''],
     responsibleUids: [this.a?.responsibleUids ?? [this.auth.me()?.uid ?? ''].filter(Boolean), Validators.required],
     reminders: [this.a?.reminders ?? [60, 1440]],
     description: [this.a?.description ?? ''],
@@ -318,6 +340,30 @@ export class AppointmentDialogComponent {
     if (!this.auth.has('CALENDAR_WRITE')) {
       this.form.disable();
     }
+    // Valida o domínio do link conforme a plataforma escolhida.
+    const check = () => {
+      const c = this.form.controls.meetingUrl;
+      const errors = { ...(c.errors ?? {}) };
+      delete errors['platform'];
+      if (c.value && !errors['pattern'] && !linkMatches(this.form.controls.meetingPlatform.value || null, c.value.trim())) errors['platform'] = true;
+      c.setErrors(Object.keys(errors).length ? errors : null);
+      this.platformKey.set(this.form.controls.meetingPlatform.value);
+    };
+    this.form.controls.meetingUrl.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => setTimeout(check));
+    this.form.controls.meetingPlatform.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => setTimeout(check));
+    this.platformKey.set(this.form.controls.meetingPlatform.value);
+  }
+
+  readonly platforms = MEETING_PLATFORMS;
+  private readonly platformKey = signal<MeetingPlatform | ''>('');
+  readonly platformLabel = computed(() => platformInfo(this.platformKey() || null)?.label ?? 'link');
+  readonly createInfo = computed(() => {
+    const info = platformInfo(this.platformKey() || null);
+    return info?.createUrl ? info : null;
+  });
+
+  openCreate(url: string): void {
+    window.open(url, '_blank', 'noopener');
   }
 
   displayCase = (v: { id: string; label: string } | string | null): string => (typeof v === 'string' ? v : v?.label ?? '');
@@ -351,7 +397,8 @@ export class AppointmentDialogComponent {
       end: end.toISOString(),
       allDay: v.allDay,
       location: v.location.trim() || null,
-      meetingUrl: v.meetingUrl.trim() || null,
+      meetingUrl: v.meetingPlatform && v.meetingPlatform !== 'PRESENCIAL' ? v.meetingUrl.trim() || null : null,
+      meetingPlatform: v.meetingPlatform || null,
       description: v.description.trim() || null,
       responsibleUids: v.responsibleUids,
       caseId: this.caseId,

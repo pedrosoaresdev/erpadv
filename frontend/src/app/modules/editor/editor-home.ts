@@ -17,6 +17,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog';
 import { EmptyStateComponent, PageHeaderComponent } from '../../shared/components/ui';
 import { BrDatePipe } from '../../shared/pipes/format.pipes';
 import { LegalTemplateDialogComponent, NewLegalDocumentDialogComponent } from './editor-dialogs';
+import { LetterheadDialogComponent } from './letterhead-dialog';
 import { Draft, DraftStatus, DraftSummary, LegalEditorService, LegalTemplate } from './legal-editor.service';
 
 /** Editor Jurídico: documentos (rascunhos e finais) e biblioteca de modelos. */
@@ -28,6 +29,7 @@ import { Draft, DraftStatus, DraftSummary, LegalEditorService, LegalTemplate } f
     <div class="page">
       <app-page-header eyebrow="Gestão documental" title="Editor Jurídico"
         subtitle="Peças e documentos a partir de modelos, com dados do cliente e do processo preenchidos automaticamente, histórico de versões e exportação em PDF/DOCX.">
+        <button mat-stroked-button (click)="letterheads()"><mat-icon>description</mat-icon>Papel timbrado</button>
         @if (canWrite) { <button mat-flat-button (click)="newDocument()"><mat-icon>note_add</mat-icon>Novo documento</button> }
       </app-page-header>
 
@@ -189,6 +191,10 @@ export class EditorHomeComponent {
     }).afterClosed().subscribe((ok) => {
       if (ok) this.service.delete(d.id).subscribe(() => { this.toast.success('Rascunho excluído.'); this.load(); });
     });
+  }
+
+  letterheads(): void {
+    this.dialog.open(LetterheadDialogComponent, { width: '960px', maxWidth: '98vw' });
   }
 
   editTemplate(t: LegalTemplate | null): void {

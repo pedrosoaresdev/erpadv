@@ -33,6 +33,8 @@
 | Exportações | CSV com neutralização de injeção de fórmulas (`=`, `+`, `-`, `@`) e registro na auditoria. |
 | Visualizador de PDF | pdf.js carregado sob demanda, com worker servido pela própria aplicação (CSP `script-src 'self'`), `isEvalSupported=false` e XFA desativado; o arquivo chega como Blob autenticado (sem URL pública); a impressão usa imagens renderizadas, sem abrir o PDF fora da sandbox. |
 | Editor Jurídico | HTML saneado por lista de permissões no navegador (colagem do Word) e, de forma definitiva, no servidor (jsoup): sem scripts, eventos, links, imagens ou estilos além de alinhamento/recuo. Valores dos campos automáticos são escapados antes da inserção; CPF/CNPJ/RG completos só para `CLIENTS_SENSITIVE_READ`; documentos ligados a processo sigiloso/criminal herdam `restricted`. Documento finalizado fica bloqueado (reabertura auditada) e toda versão é preservada no histórico. |
+| Papel timbrado | Imagem validada pela assinatura binária (PNG/JPEG) e PDF opcional (assinatura + leitura da 1ª página), até 10 MB, guardados no Storage via backend e servidos só autenticados; PDFs são convertidos em imagem no navegador com pdf.js (sem execução de scripts). Exclusão auditada; documentos que o usavam passam a sair em folha branca. |
+| Reuniões | O link é aceito apenas se o domínio for o oficial da plataforma escolhida (`meet.google.com`, `*.zoom.us`, `teams.microsoft.com`), evitando links de phishing disfarçados; a sala abre em janela separada (`noopener`), sem compartilhar sessão com o sistema; ata registrada na auditoria. |
 | Compartilhamento interno | Apenas notifica integrantes da equipe com o link; o acesso continua sujeito às permissões e ao sigilo de cada um. |
 
 ## Pendências (próximas etapas)

@@ -1,0 +1,13 @@
+{
+  "apiUrl": "/api",
+  "firebase": {
+    "apiKey": "demo-api-key",
+    "authDomain": "demo-erpadv.firebaseapp.com",
+    "projectId": "demo-erpadv",
+    "storageBucket": "demo-erpadv.appspot.com",
+    "messagingSenderId": "000000000000",
+    "appId": "1:000000000000:web:0000000000000000"
+  },
+  "messaging": { "vapidKey": "" },
+  "emulators": { "authUrl": "http://localhost:19099", "firestoreHost": "localhost", "firestorePort": 18080 }
+}

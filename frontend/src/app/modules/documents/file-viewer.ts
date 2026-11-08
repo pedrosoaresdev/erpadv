@@ -28,6 +28,76 @@ function loadPdfJs(): Promise<PdfJs> {
   return pdfjsPromise;
 }
 
+/** Renderiza a 1ª página de um PDF como PNG (ex.: papel timbrado), na largura indicada em pixels. */
+export async function renderPdfFirstPage(blob: Blob, widthPx = 1240): Promise<Blob> {
+  const pdfjs = await loadPdfJs();
+  const pdf = await pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()), isEvalSupported: false, enableXfa: false }).promise;
+  try {
+    const page = await pdf.getPage(1);
+    const base = page.getViewport({ scale: 1 });
+    const viewport = page.getViewport({ scale: widthPx / base.width });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const png = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/png'));
+    if (!png) throw new Error('Falha ao gerar a imagem');
+    return png;
+  } finally {
+    void pdf.destroy();
+  }
+}
+
+/** Imprime um PDF (renderizado em imagens, sem abrir o arquivo fora da aplicação). */
+export async function printPdf(blob: Blob, title: string, onProgress?: (pct: number) => void): Promise<void> {
+  const pdfjs = await loadPdfJs();
+  const pdf = await pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()), isEvalSupported: false, enableXfa: false }).promise;
+  const urls: string[] = [];
+  try {
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const page = await pdf.getPage(n);
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise;
+      const img = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', 0.92));
+      if (img) urls.push(URL.createObjectURL(img));
+      onProgress?.(Math.round((n / pdf.numPages) * 100));
+    }
+  } finally {
+    void pdf.destroy();
+  }
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  document.body.appendChild(frame);
+  const doc = frame.contentDocument!;
+  doc.open();
+  doc.write('<!doctype html><html><head><meta charset="utf-8"><title></title></head><body></body></html>');
+  doc.close();
+  doc.title = title;
+  const style = doc.createElement('style');
+  style.textContent = '@page{size:A4;margin:0}body{margin:0}img{display:block;width:210mm;height:297mm;page-break-after:always}img:last-child{page-break-after:auto}';
+  doc.head.appendChild(style);
+  await Promise.all(urls.map((u) => new Promise<void>((resolve) => {
+    const img = doc.createElement('img');
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+    img.src = u;
+    doc.body.appendChild(img);
+  })));
+  const win = frame.contentWindow!;
+  const cleanup = () => setTimeout(() => { frame.remove(); urls.forEach((u) => URL.revokeObjectURL(u)); }, 1000);
+  win.addEventListener('afterprint', cleanup, { once: true });
+  win.focus();
+  win.print();
+  setTimeout(cleanup, 120_000);
+}
+
 /** Normaliza para busca: minúsculas, sem acentos e com espaços simples. */
 export function normalizeForSearch(text: string): string {
   return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ');

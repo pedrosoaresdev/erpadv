@@ -510,7 +510,14 @@ export interface Appointment {
   status: AppointmentStatus;
   statusLabel: string;
   outcome: string | null;
+  meetingPlatform: MeetingPlatform | null;
+  meetingPlatformLabel: string | null;
+  minutes: string | null;
+  minutesUpdatedAt: string | null;
+  minutesByName: string | null;
 }
+
+export type MeetingPlatform = 'GOOGLE_MEET' | 'ZOOM' | 'TEAMS' | 'PRESENCIAL' | 'OUTRO';
 
 export interface AppointmentRequest {
   type: AppointmentType;
@@ -528,6 +535,7 @@ export interface AppointmentRequest {
   guests?: { name: string; email: string | null }[];
   recurrence?: string | null;
   occurrences?: number | null;
+  meetingPlatform?: MeetingPlatform | null;
 }
 
 export interface CalendarEvent {

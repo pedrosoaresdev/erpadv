@@ -90,7 +90,12 @@ Documentação: [arquitetura e fluxo de autenticação](docs/ARQUITETURA.md) ·
   requerimento, parecer, relatório processual e documento em branco) e modelos do escritório; campos automáticos
   de cliente, processo, escritório e advogado (pendentes destacados); cabeçalho, rodapé e numeração de páginas;
   exportação PDF/DOCX, impressão, envio à central de documentos; histórico de versões com restauração;
-  rascunho/final.
+  rascunho/final; **papel timbrado** do escritório (PNG/JPG ou PDF, ficheiro com vários papéis, padrão para novos
+  documentos, margens da área de texto) aplicado no editor, no PDF, no DOCX e na impressão.
+* **Reuniões**: reuniões e atendimentos presenciais ou por videoconferência, com a plataforma escolhida pelo
+  advogado (Google Meet, Zoom, Microsoft Teams ou outro link, validado pelo domínio oficial), atalho para criar a sala
+  na conta do advogado, sala da reunião no sistema (cronômetro, participantes, vínculos e ata) com a chamada aberta
+  numa janela ao lado — Google Meet e Zoom não permitem ser exibidos dentro de outro site.
 * **Financeiro**: contas a receber e a pagar com categorias de receitas (honorários, êxito, consultorias,
   contratos, serviços) e despesas (aluguel, energia, internet, pessoal, sistemas, marketing, fornecedores…),
   parcelamentos e despesas recorrentes, baixa com valor efetivo e comprovante (Firebase Storage via

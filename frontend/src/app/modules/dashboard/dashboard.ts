@@ -192,14 +192,14 @@ const iso = (d: Date) =>
             <div class="card-title"><mat-icon>groups</mat-icon>Desempenho da equipe</div>
             @if (d.team.length) {
               <div class="table-wrap">
-                <table class="data compact">
+                <table class="data compact stack">
                   <thead><tr><th>Advogado</th><th>Processos ativos</th><th>Prazos cumpridos</th><th>Prazos vencidos</th><th>Cumprimento</th></tr></thead>
                   <tbody>
                     @for (t of d.team; track t.uid) {
                       <tr>
-                        <td>{{ t.name }}</td><td class="mono">{{ t.activeCases }}</td><td class="mono">{{ t.deadlinesCompleted }}</td>
-                        <td class="mono" [class.bad]="t.deadlinesOverdue">{{ t.deadlinesOverdue }}</td>
-                        <td><span class="bar"><span [style.width.%]="rate(t)"></span></span> <span class="mono small">{{ rate(t) }}%</span></td>
+                        <td data-label="Advogado">{{ t.name }}</td><td class="mono" data-label="Processos ativos">{{ t.activeCases }}</td><td class="mono" data-label="Prazos cumpridos">{{ t.deadlinesCompleted }}</td>
+                        <td class="mono" [class.bad]="t.deadlinesOverdue" data-label="Prazos vencidos">{{ t.deadlinesOverdue }}</td>
+                        <td data-label="Cumprimento"><span class="bar"><span [style.width.%]="rate(t)"></span></span> <span class="mono small">{{ rate(t) }}%</span></td>
                       </tr>
                     }
                   </tbody>
@@ -242,8 +242,21 @@ const iso = (d: Date) =>
     .bar { display: inline-block; width: 90px; height: 6px; border-radius: 4px; background: var(--app-border); overflow: hidden; vertical-align: middle; }
     .bar span { display: block; height: 100%; background: var(--app-success); }
     .small { font-size: 12px; }
-    @media (max-width: 1200px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .charts { grid-template-columns: 1fr 1fr; } }
-    @media (max-width: 760px) { .kpis, .charts { grid-template-columns: 1fr; } .span-2 { grid-column: auto; } }
+    .kpis > *, .charts > * { min-width: 0; }
+    .charts .card { overflow: hidden; }
+    @media (max-width: 1200px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .charts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 760px) {
+      .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+      .kpis.second { margin-top: 10px; }
+      .charts { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+      .span-2 { grid-column: auto; }
+      .quick { flex-wrap: nowrap; overflow-x: auto; margin: 0 0 14px; padding: 2px 0 6px; scrollbar-width: none; }
+      .quick::-webkit-scrollbar { display: none; }
+      .qa { flex: none; }
+      .lawyer { width: 100%; }
+      .pending { display: none; }
+    }
+    @media (max-width: 360px) { .kpis { grid-template-columns: minmax(0, 1fr); } }
   `,
 })
 export class DashboardComponent {

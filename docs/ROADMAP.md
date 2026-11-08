@@ -42,7 +42,12 @@ os dados já cadastrados.
 Pendências conhecidas da Fase 1: filtro do dashboard por **unidade do escritório** depende do cadastro de unidades
 (Fase 6); foto do cliente ainda não é armazenada.
 
-Pendências conhecidas da Fase 2: OCR de documentos digitalizados e assinatura eletrônica ficam nas Fases 5 e 4,
+Complementos da Fase 2: papel timbrado no Editor Jurídico; módulo **Reuniões** (Google Meet, Zoom, Teams ou
+presencial, sala com ata); Início ajustado ao celular; gráfico de receitas por categoria estabilizado.
+
+Pendências conhecidas da Fase 2: criação automática das salas pelo sistema (API do Google Calendar/Meet e do Zoom,
+com OAuth do escritório) e a videochamada embutida via Zoom Meeting SDK dependem de credenciais das plataformas
+(Fase 4 — Integrações); OCR de documentos digitalizados e assinatura eletrônica ficam nas Fases 5 e 4,
 como prevê a especificação; sincronização bidirecional com o Google Calendar pela API oficial é da Fase 4 (hoje a
 exportação é por arquivo .ics); convites por e-mail aos convidados externos dependem do e-mail transacional;
 DOC/DOCX/XLS/PPT são baixados para abrir no aplicativo (PDF, imagens e TXT têm visualização integrada); não há

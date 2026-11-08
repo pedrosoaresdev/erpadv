@@ -63,6 +63,21 @@ public class CalendarController {
     }
 
     /** Relatório de compromissos ou de audiências (PDF/Excel). */
+    @GetMapping("/api/calendar/meetings")
+    @PreAuthorize("hasAuthority('PERM_CALENDAR_READ')")
+    public List<AppointmentResponse> meetings(@AuthenticationPrincipal AuthenticatedUser user,
+                                              @RequestParam Instant from, @RequestParam Instant to,
+                                              @RequestParam(required = false) String responsibleUid) {
+        return calendar.meetings(user, from, to, responsibleUid);
+    }
+
+    @PutMapping("/api/calendar/appointments/{id}/minutes")
+    @PreAuthorize("hasAuthority('PERM_CALENDAR_WRITE')")
+    public AppointmentResponse minutes(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                                       @Valid @RequestBody br.com.erpadv.dto.CalendarDtos.MinutesRequest req) {
+        return calendar.saveMinutes(user, id, req.minutes());
+    }
+
     @GetMapping("/api/calendar/report")
     @PreAuthorize("hasAuthority('PERM_CALENDAR_READ') and hasAuthority('PERM_REPORTS_VIEW')")
     public org.springframework.http.ResponseEntity<byte[]> report(@AuthenticationPrincipal AuthenticatedUser user,

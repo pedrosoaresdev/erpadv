@@ -25,6 +25,7 @@ import br.com.erpadv.models.LegalDocKind;
 import br.com.erpadv.models.LegalDraft;
 import br.com.erpadv.models.LegalDraftVersion;
 import br.com.erpadv.models.LegalTemplate;
+import br.com.erpadv.models.Letterhead;
 import br.com.erpadv.models.Office;
 import br.com.erpadv.models.StoredDocument;
 import br.com.erpadv.models.UserProfile;
@@ -44,6 +45,7 @@ import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -112,11 +114,19 @@ public class LegalEditorService {
     private final CryptoService crypto;
     private final DocumentService documents;
     private final AuditService audit;
+    private final LegalEditorRepositories.Letterheads letterheads;
+    private final br.com.erpadv.firebase.StorageGateway storage;
+
+    /** Limite do arquivo do papel timbrado (imagem ou PDF). */
+    static final long LETTERHEAD_MAX_BYTES = 10L * 1024 * 1024;
 
     public LegalEditorService(LegalEditorRepositories.Templates templates, LegalEditorRepositories.Drafts drafts,
                               LegalEditorRepositories.Versions versions, ClientService clients, CaseService cases,
                               OfficeRepository offices, UserRepository users, CryptoService crypto, DocumentService documents,
-                              AuditService audit) {
+                              AuditService audit, LegalEditorRepositories.Letterheads letterheads,
+                              br.com.erpadv.firebase.StorageGateway storage) {
+        this.letterheads = letterheads;
+        this.storage = storage;
         this.templates = templates;
         this.drafts = drafts;
         this.versions = versions;
@@ -328,8 +338,12 @@ public class LegalEditorService {
         d.setLawyerUid(values.get("advogado.uid"));
         d.setLawyerName(values.get("advogado.nome"));
         d.setContent(clean(render(content, values)));
-        d.setHeader(defaultHeader(values));
-        d.setFooter(defaultFooter(values));
+        String letterheadId = req.letterheadId() == null ? defaultLetterheadId(officeId)
+                : req.letterheadId().isBlank() ? null : requireLetterhead(officeId, req.letterheadId()).getId();
+        d.setLetterheadId(letterheadId);
+        // Com papel timbrado, a identificação do escritório já está impressa na folha.
+        d.setHeader(letterheadId == null ? defaultHeader(values) : null);
+        d.setFooter(letterheadId == null ? defaultFooter(values) : null);
         d.setPageNumbers(true);
         Instant now = Instant.now();
         d.setCreatedAt(now);
@@ -353,6 +367,9 @@ public class LegalEditorService {
         d.setHeader(trimToNull(req.header()));
         d.setFooter(trimToNull(req.footer()));
         d.setPageNumbers(req.pageNumbers());
+        if (req.letterheadId() != null) {
+            d.setLetterheadId(req.letterheadId().isBlank() ? null : requireLetterhead(user.officeId(), req.letterheadId()).getId());
+        }
         if (!Objects.equals(emptyToNull(req.clientId()), d.getClientId()) || !Objects.equals(emptyToNull(req.caseId()), d.getCaseId())) {
             link(user, d, req.clientId(), req.caseId());
         }
@@ -449,6 +466,7 @@ public class LegalEditorService {
         d.setHeader(src.getHeader());
         d.setFooter(src.getFooter());
         d.setPageNumbers(src.isPageNumbers());
+        d.setLetterheadId(src.getLetterheadId());
         d.setCreatedAt(Instant.now());
         d.setCreatedBy(user.uid());
         d.setCreatedByName(user.displayName());
@@ -479,8 +497,9 @@ public class LegalEditorService {
         return file;
     }
 
-    private static ReportExporter.Exported render(LegalDraft d, String format) {
-        HtmlDocument.Layout layout = new HtmlDocument.Layout(d.getHeader(), d.getFooter(), d.isPageNumbers());
+    private ReportExporter.Exported render(LegalDraft d, String format) {
+        HtmlDocument.Layout layout = new HtmlDocument.Layout(d.getHeader(), d.getFooter(), d.isPageNumbers(),
+                background(d.getOfficeId(), d.getLetterheadId(), "docx".equalsIgnoreCase(format)));
         String base = fileBase(d.getTitle());
         if ("docx".equalsIgnoreCase(format)) {
             return new ReportExporter.Exported(HtmlDocument.toDocx(d.getContent(), layout), base + ".docx",
@@ -519,6 +538,146 @@ public class LegalEditorService {
         audit.record(user, "LEGAL_DOC_STORED", "legal_document", id, "Documento salvo na central documental: " + d.getTitle(),
                 Map.of("documentId", result.id(), "format", "docx".equalsIgnoreCase(format) ? "docx" : "pdf"));
         return result;
+    }
+
+    // ------------------------------------------------------------------ papel timbrado
+
+    public List<br.com.erpadv.dto.LegalEditorDtos.LetterheadResponse> letterheads(AuthenticatedUser user) {
+        return letterheads.list(letterheads.collection(user.requireOffice()).orderBy("name"), 100).stream()
+                .map(br.com.erpadv.dto.LegalEditorDtos.LetterheadResponse::of).toList();
+    }
+
+    /**
+     * Novo papel timbrado: imagem A4 obrigatória (PNG/JPEG — para PDFs o navegador gera a imagem da 1ª página)
+     * e PDF original opcional, usado como fundo vetorial na exportação em PDF.
+     */
+    public br.com.erpadv.dto.LegalEditorDtos.LetterheadResponse createLetterhead(AuthenticatedUser user,
+                                                                               br.com.erpadv.dto.LegalEditorDtos.LetterheadMeta meta,
+                                                                               byte[] image, String imageName, byte[] pdf, String pdfName) {
+        String officeId = user.requireOffice();
+        var imageFile = br.com.erpadv.firebase.FileInspector.inspect(image, imageName, LETTERHEAD_MAX_BYTES,
+                EnumSet.of(br.com.erpadv.firebase.FileInspector.FileKind.PNG, br.com.erpadv.firebase.FileInspector.FileKind.JPEG));
+        Letterhead l = new Letterhead();
+        l.setId(UUID.randomUUID().toString());
+        String base = "offices/" + officeId + "/letterheads/" + l.getId() + "/";
+        l.setImagePath(base + "fundo." + imageFile.kind().extension);
+        l.setImageContentType(imageFile.kind().contentType);
+        storage.put(l.getImagePath(), image, imageFile.kind().contentType, Map.of("officeId", officeId, "letterheadId", l.getId()));
+        if (pdf != null && pdf.length > 0) {
+            var pdfFile = br.com.erpadv.firebase.FileInspector.inspect(pdf, pdfName, LETTERHEAD_MAX_BYTES,
+                    EnumSet.of(br.com.erpadv.firebase.FileInspector.FileKind.PDF));
+            try (var reader = new com.lowagie.text.pdf.PdfReader(pdf)) {
+                if (reader.getNumberOfPages() < 1) {
+                    throw new BusinessException("LETTERHEAD_INVALID", "O PDF do papel timbrado não tem páginas.");
+                }
+            } catch (java.io.IOException | RuntimeException e) {
+                if (e instanceof BusinessException be) {
+                    throw be;
+                }
+                throw new BusinessException("LETTERHEAD_INVALID", "Não foi possível ler o PDF do papel timbrado (protegido ou corrompido).");
+            }
+            l.setPdfPath(base + "original.pdf");
+            storage.put(l.getPdfPath(), pdf, pdfFile.kind().contentType, Map.of("officeId", officeId, "letterheadId", l.getId()));
+        }
+        applyMeta(l, meta);
+        l.setCreatedAt(Instant.now());
+        l.setCreatedBy(user.uid());
+        l.setCreatedByName(user.displayName());
+        l.setUpdatedAt(l.getCreatedAt());
+        l.setUpdatedBy(user.uid());
+        if (meta.isDefault() || letterheads.list(letterheads.collection(officeId), 1).isEmpty()) {
+            makeDefault(officeId, l);
+        }
+        letterheads.save(officeId, l);
+        audit.record(user, "LETTERHEAD_CREATED", "letterhead", l.getId(), "Papel timbrado adicionado: " + l.getName());
+        return br.com.erpadv.dto.LegalEditorDtos.LetterheadResponse.of(l);
+    }
+
+    public br.com.erpadv.dto.LegalEditorDtos.LetterheadResponse updateLetterhead(AuthenticatedUser user, String id,
+                                                                               br.com.erpadv.dto.LegalEditorDtos.LetterheadMeta meta) {
+        String officeId = user.requireOffice();
+        Letterhead l = requireLetterhead(officeId, id);
+        applyMeta(l, meta);
+        if (meta.isDefault()) {
+            makeDefault(officeId, l);
+        } else {
+            l.setPrimary(false);
+        }
+        l.setUpdatedAt(Instant.now());
+        l.setUpdatedBy(user.uid());
+        letterheads.save(officeId, l);
+        audit.record(user, "LETTERHEAD_UPDATED", "letterhead", id, "Papel timbrado atualizado: " + l.getName());
+        return br.com.erpadv.dto.LegalEditorDtos.LetterheadResponse.of(l);
+    }
+
+    /** Exclui o papel timbrado; documentos que o usavam passam a sair em folha branca (o conteúdo não muda). */
+    public void deleteLetterhead(AuthenticatedUser user, String id) {
+        String officeId = user.requireOffice();
+        Letterhead l = requireLetterhead(officeId, id);
+        for (String path : java.util.Arrays.asList(l.getImagePath(), l.getPdfPath())) {
+            if (path != null) {
+                try {
+                    storage.delete(path);
+                } catch (RuntimeException ignored) {
+                    // arquivo já ausente
+                }
+            }
+        }
+        letterheads.delete(officeId, id);
+        for (LegalDraft d : drafts.list(drafts.collection(officeId).whereEqualTo("letterheadId", id), 500)) {
+            d.setLetterheadId(null);
+            drafts.save(officeId, d);
+        }
+        audit.record(user, "LETTERHEAD_DELETED", "letterhead", id, "Papel timbrado excluído: " + l.getName());
+    }
+
+    public br.com.erpadv.dto.DocumentDtos.FileContent letterheadImage(AuthenticatedUser user, String id) {
+        Letterhead l = requireLetterhead(user.requireOffice(), id);
+        return new br.com.erpadv.dto.DocumentDtos.FileContent(storage.get(l.getImagePath()), "papel-timbrado", l.getImageContentType());
+    }
+
+    private void applyMeta(Letterhead l, br.com.erpadv.dto.LegalEditorDtos.LetterheadMeta meta) {
+        if (meta.marginTop() + meta.marginBottom() > 220) {
+            throw new BusinessException("LETTERHEAD_MARGINS", "As margens superior e inferior deixam pouco espaço para o texto.");
+        }
+        l.setName(meta.name().trim());
+        l.setMarginTop(meta.marginTop());
+        l.setMarginBottom(meta.marginBottom());
+        l.setMarginLeft(meta.marginLeft());
+        l.setMarginRight(meta.marginRight());
+    }
+
+    private void makeDefault(String officeId, Letterhead l) {
+        for (Letterhead other : letterheads.list(letterheads.collection(officeId).whereEqualTo("primary", true), 50)) {
+            if (!other.getId().equals(l.getId())) {
+                other.setPrimary(false);
+                letterheads.save(officeId, other);
+            }
+        }
+        l.setPrimary(true);
+    }
+
+    private String defaultLetterheadId(String officeId) {
+        return letterheads.list(letterheads.collection(officeId).whereEqualTo("primary", true), 1).stream()
+                .findFirst().map(Letterhead::getId).orElse(null);
+    }
+
+    private Letterhead requireLetterhead(String officeId, String id) {
+        return letterheads.findById(officeId, id).orElseThrow(() -> new NotFoundException("Papel timbrado"));
+    }
+
+    /** Fundo para exportação; papel excluído = folha branca. No DOCX usa sempre a imagem. */
+    private HtmlDocument.Background background(String officeId, String letterheadId, boolean docx) {
+        if (letterheadId == null || officeId == null) {
+            return null;
+        }
+        Letterhead l = letterheads.findById(officeId, letterheadId).orElse(null);
+        if (l == null) {
+            return null;
+        }
+        byte[] pdf = !docx && l.getPdfPath() != null ? storage.get(l.getPdfPath()) : null;
+        byte[] image = pdf == null ? storage.get(l.getImagePath()) : null;
+        return new HtmlDocument.Background(image, pdf, l.getMarginTop(), l.getMarginBottom(), l.getMarginLeft(), l.getMarginRight());
     }
 
     // ------------------------------------------------------------------ helpers

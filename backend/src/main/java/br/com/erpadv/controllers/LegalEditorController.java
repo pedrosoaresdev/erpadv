@@ -71,6 +71,52 @@ public class LegalEditorController {
         editor.deleteTemplate(user, id);
     }
 
+    // ------------------------------------------------------------------ papel timbrado
+
+    @GetMapping("/letterheads")
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_READ')")
+    public List<br.com.erpadv.dto.LegalEditorDtos.LetterheadResponse> letterheads(@AuthenticationPrincipal AuthenticatedUser user) {
+        return editor.letterheads(user);
+    }
+
+    @PostMapping(value = "/letterheads", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_WRITE')")
+    public br.com.erpadv.dto.LegalEditorDtos.LetterheadResponse createLetterhead(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @Valid @org.springframework.web.bind.annotation.RequestPart("meta") br.com.erpadv.dto.LegalEditorDtos.LetterheadMeta meta,
+            @org.springframework.web.bind.annotation.RequestPart("image") org.springframework.web.multipart.MultipartFile image,
+            @org.springframework.web.bind.annotation.RequestPart(value = "pdf", required = false) org.springframework.web.multipart.MultipartFile pdf) {
+        return editor.createLetterhead(user, meta, DocumentController.bytes(image), image.getOriginalFilename(),
+                pdf == null ? null : DocumentController.bytes(pdf), pdf == null ? null : pdf.getOriginalFilename());
+    }
+
+    @PutMapping("/letterheads/{id}")
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_WRITE')")
+    public br.com.erpadv.dto.LegalEditorDtos.LetterheadResponse updateLetterhead(@AuthenticationPrincipal AuthenticatedUser user,
+                                                                               @PathVariable String id,
+                                                                               @Valid @RequestBody br.com.erpadv.dto.LegalEditorDtos.LetterheadMeta meta) {
+        return editor.updateLetterhead(user, id, meta);
+    }
+
+    @DeleteMapping("/letterheads/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_WRITE')")
+    public void deleteLetterhead(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
+        editor.deleteLetterhead(user, id);
+    }
+
+    @GetMapping("/letterheads/{id}/image")
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_READ')")
+    public ResponseEntity<byte[]> letterheadImage(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
+        var file = editor.letterheadImage(user, id);
+        return ResponseEntity.ok()
+                .contentType(org.springframework.http.MediaType.parseMediaType(file.contentType()))
+                .header(org.springframework.http.HttpHeaders.CACHE_CONTROL, "private, max-age=300")
+                .header("X-Content-Type-Options", "nosniff")
+                .body(file.bytes());
+    }
+
     @GetMapping("/fields")
     @PreAuthorize("hasAuthority('PERM_DOCUMENTS_READ')")
     public FieldsResponse fields(@AuthenticationPrincipal AuthenticatedUser user,

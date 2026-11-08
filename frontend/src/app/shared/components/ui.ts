@@ -60,6 +60,16 @@ export class PageHeaderComponent {
     .hint.success { color: var(--app-success); }
     .hint.danger { color: var(--app-danger); }
     .hint.warning { color: var(--app-warning); }
+    :host { display: block; height: 100%; }
+    .stat { height: 100%; box-sizing: border-box; }
+    @media (max-width: 760px) {
+      .stat { padding: 12px 14px; }
+      .label { font-size: 12px; line-height: 1.25; }
+      .icon { width: 28px; height: 28px; border-radius: 8px; flex: none; }
+      .icon mat-icon { font-size: 16px; width: 16px; height: 16px; }
+      .value { font-size: 21px; margin-top: 6px; overflow-wrap: anywhere; }
+      .hint { font-size: 11px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    }
   `,
 })
 export class StatCardComponent {

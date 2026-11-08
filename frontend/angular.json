@@ -71,6 +71,29 @@
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
+            },
+            "docker-proxy": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "assets": [
+                {
+                  "glob": "**/*",
+                  "input": "public",
+                  "ignore": [
+                    "config.json"
+                  ]
+                },
+                {
+                  "glob": "pdf.worker.min.mjs",
+                  "input": "node_modules/pdfjs-dist/build",
+                  "output": "pdfjs"
+                },
+                {
+                  "glob": "config.json",
+                  "input": "dev/docker-proxy"
+                }
+              ]
             }
           },
           "defaultConfiguration": "production"
@@ -83,6 +106,10 @@
             },
             "development": {
               "buildTarget": "frontend:build:development"
+            },
+            "docker-proxy": {
+              "buildTarget": "frontend:build:docker-proxy",
+              "proxyConfig": "proxy.docker.json"
             }
           },
           "defaultConfiguration": "development",

@@ -21,6 +21,11 @@ public class Appointment extends BaseEntity {
     private boolean allDay;
     private String location;
     private String meetingUrl;
+    /** Reuniões: plataforma escolhida, ata e quem a registrou. */
+    private MeetingPlatform meetingPlatform;
+    private String minutes;
+    private java.time.Instant minutesUpdatedAt;
+    private String minutesByName;
     private String description;
     private List<String> responsibleUids = new ArrayList<>();
     private List<String> responsibleNames = new ArrayList<>();

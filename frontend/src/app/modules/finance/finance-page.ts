@@ -72,12 +72,12 @@ export function periodRange(p: Period, today = new Date()): { from: string; to: 
               </div>
               <div class="card card-pad">
                 <div class="card-title"><mat-icon>donut_small</mat-icon>Receitas por categoria</div>
-                @if (s.incomeByCategory.length) { <app-chart [config]="categoryChart('income')" [height]="260" /> }
+                @if (s.incomeByCategory.length) { <app-chart [config]="incomeCategoryChart()" [height]="300" /> }
                 @else { <app-empty-state icon="savings" title="Sem receitas no período" /> }
               </div>
               <div class="card card-pad">
                 <div class="card-title"><mat-icon>donut_small</mat-icon>Despesas por categoria</div>
-                @if (s.expenseByCategory.length) { <app-chart [config]="categoryChart('expense')" [height]="260" /> }
+                @if (s.expenseByCategory.length) { <app-chart [config]="expenseCategoryChart()" [height]="300" /> }
                 @else { <app-empty-state icon="receipt_long" title="Sem despesas no período" /> }
               </div>
               <div class="card card-pad">
@@ -254,13 +254,18 @@ export class FinancePageComponent {
     this.load();
   }
 
-  categoryChart(kind: 'income' | 'expense'): ChartConfiguration {
+  /** Sinais computados: o gráfico só é refeito quando o resumo muda (antes, um novo objeto a cada ciclo fazia o
+   * Chart.js redesenhar e reanimar sem parar). */
+  readonly incomeCategoryChart = computed(() => this.categoryChart('income'));
+  readonly expenseCategoryChart = computed(() => this.categoryChart('expense'));
+
+  private categoryChart(kind: 'income' | 'expense'): ChartConfiguration {
     const s = this.summary();
     const items = kind === 'income' ? s?.incomeByCategory ?? [] : s?.expenseByCategory ?? [];
     return {
       type: 'doughnut',
       data: { labels: items.map((i) => i.label), datasets: [{ data: items.map((i) => i.amountCents / 100), backgroundColor: CHART_COLORS, borderWidth: 0 }] },
-      options: { cutout: '64%', plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (c) => `${c.label}: ${BRL.format(Number(c.raw))}` } } } } as ChartConfiguration['options'],
+      options: { cutout: '60%', layout: { padding: 4 }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, padding: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (c) => `${c.label}: ${BRL.format(Number(c.raw))}` } } } } as ChartConfiguration['options'],
     };
   }
 

@@ -299,6 +299,48 @@ class OperationsEndToEndTest {
                 "clientId", clientId))).andExpect(status().isCreated()).andReturn());
         assertThat(fromCustom.get("content").asText()).contains("Outorgante: Maria Operação");
         mvc.perform(auth(delete("/api/legal-editor/templates/" + custom.get("id").asText()))).andExpect(status().isNoContent());
+
+        // ------------------------------------------------------------------ 6. Papel timbrado
+        java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(124, 175, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        ByteArrayOutputStream pngOut = new ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(img, "png", pngOut);
+        mvc.perform(upload(multipart("/api/legal-editor/letterheads"), new MockMultipartFile("image", "timbrado.png", "image/png", new byte[]{'M', 'Z', 1}),
+                new MockMultipartFile("meta", "", "application/json", JSON.writeValueAsBytes(Map.of("name", "Falso", "marginTop", 40,
+                        "marginBottom", 30, "marginLeft", 30, "marginRight", 20, "isDefault", true))))).andExpect(status().is4xxClientError());
+        JsonNode lh = body(mvc.perform(upload(multipart("/api/legal-editor/letterheads"), new MockMultipartFile("image", "timbrado.png", "image/png", pngOut.toByteArray()),
+                new MockMultipartFile("meta", "", "application/json", JSON.writeValueAsBytes(Map.of("name", "Timbrado oficial", "marginTop", 45,
+                        "marginBottom", 30, "marginLeft", 30, "marginRight", 20, "isDefault", false))))).andExpect(status().isCreated()).andReturn());
+        String lhId = lh.get("id").asText();
+        assertThat(lh.get("isDefault").asBoolean()).as("primeiro papel vira padrão").isTrue();
+        mvc.perform(auth(get("/api/legal-editor/letterheads/" + lhId + "/image"))).andExpect(status().isOk());
+        JsonNode onLetterhead = body(mvc.perform(json(post("/api/legal-editor/documents"), Map.of("templateId", "sys-hipossuficiencia", "clientId", clientId)))
+                .andExpect(status().isCreated()).andReturn());
+        assertThat(onLetterhead.get("letterheadId").asText()).isEqualTo(lhId);
+        assertThat(onLetterhead.path("header").isMissingNode() || onLetterhead.path("header").isNull()).as("sem cabeçalho de texto").isTrue();
+        MvcResult lhPdf = mvc.perform(auth(get("/api/legal-editor/documents/" + onLetterhead.get("id").asText() + "/export")).param("format", "pdf"))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(new String(lhPdf.getResponse().getContentAsByteArray(), 0, 5, StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
+        mvc.perform(auth(get("/api/legal-editor/documents/" + onLetterhead.get("id").asText() + "/export")).param("format", "docx")).andExpect(status().isOk());
+        mvc.perform(json(put("/api/legal-editor/letterheads/" + lhId), Map.of("name", "Timbrado 2026", "marginTop", 50, "marginBottom", 30,
+                "marginLeft", 30, "marginRight", 20, "isDefault", true))).andExpect(jsonPath("$.marginTop").value(50));
+        mvc.perform(auth(delete("/api/legal-editor/letterheads/" + lhId))).andExpect(status().isNoContent());
+        mvc.perform(auth(get("/api/legal-editor/documents/" + onLetterhead.get("id").asText()))).andExpect(jsonPath("$.letterheadId").doesNotExist());
+
+        // ------------------------------------------------------------------ 7. Reuniões
+        Instant meetStart = Instant.now().plus(1, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
+        Map<String, Object> meeting = new HashMap<>(Map.of("type", "REUNIAO", "title", "Reunião com a cliente", "start", meetStart.toString(),
+                "end", meetStart.plus(1, ChronoUnit.HOURS).toString(), "responsibleUids", List.of(ownerUid), "clientId", clientId,
+                "meetingPlatform", "GOOGLE_MEET", "meetingUrl", "https://zoom.us/j/123"));
+        mvc.perform(json(post("/api/calendar/appointments"), meeting)).andExpect(status().is4xxClientError())
+                .andExpect(jsonPath("$.code").value("MEETING_URL_PLATFORM"));
+        meeting.put("meetingUrl", "https://meet.google.com/abc-defg-hij");
+        String meetingId = body(mvc.perform(json(post("/api/calendar/appointments"), meeting)).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.meetingPlatformLabel").value("Google Meet")).andReturn()).get("id").asText();
+        mvc.perform(auth(get("/api/calendar/meetings")).param("from", Instant.now().toString()).param("to", meetStart.plus(2, ChronoUnit.DAYS).toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(meetingId));
+        mvc.perform(json(put("/api/calendar/appointments/" + meetingId + "/minutes"), Map.of("minutes", "Cliente trará documentos até sexta.")))
+                .andExpect(jsonPath("$.minutes").value("Cliente trará documentos até sexta."))
+                .andExpect(jsonPath("$.minutesByName").exists());
     }
 
     // ------------------------------------------------------------------ helpers

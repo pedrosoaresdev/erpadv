@@ -32,6 +32,8 @@ public class LegalDraft extends BaseEntity {
     private String header;
     private String footer;
     private boolean pageNumbers = true;
+    /** Papel timbrado aplicado (nulo = folha em branco). */
+    private String letterheadId;
     private Status status = Status.RASCUNHO;
     /** Número da última versão registrada no histórico. */
     private int version;

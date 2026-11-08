@@ -306,6 +306,38 @@ public class CalendarService {
                 .map(AppointmentResponse::of).toList();
     }
 
+    /** Reuniões e atendimentos (presenciais ou por videoconferência) do período. */
+    public List<AppointmentResponse> meetings(AuthenticatedUser user, Instant from, Instant to, String responsibleUid) {
+        String officeId = user.requireOffice();
+        if (from == null || to == null || !to.isAfter(from) || Duration.between(from, to).compareTo(Duration.ofDays(400)) > 0) {
+            throw new BusinessException("INVALID_RANGE", "Intervalo inválido (máximo de 400 dias).");
+        }
+        Query q = appointments.collection(officeId).whereIn("type", List.of(br.com.erpadv.models.AppointmentType.REUNIAO.name(),
+                br.com.erpadv.models.AppointmentType.CONSULTA.name()));
+        if (!user.has(Permission.CRIMINAL_READ)) {
+            q = q.whereEqualTo("restricted", false);
+        }
+        q = q.whereGreaterThanOrEqualTo("start", from.toEpochMilli()).whereLessThan("start", to.toEpochMilli()).orderBy("start");
+        return appointments.list(q, 500).stream()
+                .filter(a -> responsibleUid == null || responsibleUid.isBlank() || a.getResponsibleUids().contains(responsibleUid))
+                .map(AppointmentResponse::of).toList();
+    }
+
+    /** Ata da reunião (texto livre), registrada na auditoria. */
+    public AppointmentResponse saveMinutes(AuthenticatedUser user, String id, String minutes) {
+        Appointment a = load(user, id);
+        String previous = a.getMinutes();
+        a.setMinutes(minutes == null || minutes.isBlank() ? null : minutes.trim());
+        a.setMinutesUpdatedAt(Instant.now());
+        a.setMinutesByName(user.displayName());
+        a.setUpdatedAt(Instant.now());
+        a.setUpdatedBy(user.uid());
+        appointments.save(user.officeId(), a);
+        audit.record(user, previous == null ? "MEETING_MINUTES_CREATED" : "MEETING_MINUTES_UPDATED", "appointment", id,
+                "Ata registrada: " + a.getTitle());
+        return AppointmentResponse.of(a);
+    }
+
     /** Relatório de compromissos do período (PDF/Excel). */
     public br.com.erpadv.services.generation.ReportExporter.Exported report(AuthenticatedUser user, Instant from, Instant to,
                                                                           String responsibleUid, boolean hearingsOnly, String format,
@@ -431,6 +463,13 @@ public class CalendarService {
         a.setAllDay(req.allDay());
         a.setLocation(trim(req.location()));
         a.setMeetingUrl(trim(req.meetingUrl()));
+        br.com.erpadv.models.MeetingPlatform platform = req.meetingPlatform() != null ? req.meetingPlatform()
+                : br.com.erpadv.models.MeetingPlatform.fromUrl(a.getMeetingUrl());
+        if (platform != null && a.getMeetingUrl() != null && !platform.accepts(a.getMeetingUrl())) {
+            throw new BusinessException("MEETING_URL_PLATFORM", "O link não é do " + platform.label()
+                    + ". Cole o endereço gerado pela própria plataforma.");
+        }
+        a.setMeetingPlatform(platform);
         a.setDescription(trim(req.description()));
         a.setResponsibleUids(uids);
         a.setResponsibleNames(names);

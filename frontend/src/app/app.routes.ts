@@ -50,6 +50,8 @@ export const routes: Routes = [
         loadComponent: () => import('./modules/contracts/contract-detail').then((m) => m.ContractDetailComponent) },
       { path: 'audiencias', canActivate: [permissionGuard], data: { permission: 'CALENDAR_READ' }, title: 'Audiências · ERPAdv',
         loadComponent: () => import('./modules/calendar/hearings-page').then((m) => m.HearingsPageComponent) },
+      { path: 'reunioes', canActivate: [permissionGuard], data: { permission: 'CALENDAR_READ' }, title: 'Reuniões · ERPAdv',
+        loadComponent: () => import('./modules/calendar/meetings-page').then((m) => m.MeetingsPageComponent) },
       { path: 'tarefas', canActivate: [permissionGuard], data: { permission: 'BOARDS_USE' }, title: 'Tarefas · ERPAdv',
         loadComponent: () => import('./modules/boards/tasks-page').then((m) => m.TasksPageComponent) },
       { path: 'quadros', canActivate: [permissionGuard], data: { permission: 'BOARDS_USE' }, title: 'Quadros · ERPAdv',

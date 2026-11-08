@@ -110,4 +110,63 @@ class OperationsUnitTest {
         assertThat(LegalEditorService.fileBase("Petição Inicial — João / Banco: \"teste\"")).isEqualTo("peticao-inicial-joao-banco-teste");
         assertThat(LegalEditorService.fileBase("***")).isEqualTo("documento");
     }
+
+    private static byte[] png(int w, int h) throws Exception {
+        var img = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        var g = img.createGraphics();
+        g.setColor(java.awt.Color.WHITE);
+        g.fillRect(0, 0, w, h);
+        g.setColor(new java.awt.Color(0x12, 0x30, 0x5a));
+        g.fillRect(0, 0, w, h / 10);
+        g.dispose();
+        var out = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(img, "png", out);
+        return out.toByteArray();
+    }
+
+    @Test
+    void papelTimbradoComoFundoNoPdfENoDocx() throws Exception {
+        byte[] image = png(124, 175);
+        HtmlDocument.Background bg = new HtmlDocument.Background(image, null, 45, 30, 30, 20);
+        String html = "<p>Texto 1</p><hr class=\"page-break\"><p>Texto 2</p>";
+        byte[] pdf = HtmlDocument.toPdf(html, new HtmlDocument.Layout(null, null, true, bg));
+        try (var reader = new com.lowagie.text.pdf.PdfReader(pdf)) {
+            assertThat(reader.getNumberOfPages()).isEqualTo(2);
+            for (int p = 1; p <= 2; p++) {
+                // o fundo (imagem) aparece em todas as páginas
+                var resources = reader.getPageN(p).getAsDict(com.lowagie.text.pdf.PdfName.RESOURCES);
+                assertThat(resources.getAsDict(com.lowagie.text.pdf.PdfName.XOBJECT)).isNotNull();
+            }
+        }
+        // PDF original como fundo vetorial
+        byte[] letterPdf = HtmlDocument.toPdf("<p>MODELO TIMBRADO</p>", new HtmlDocument.Layout(null, null, false));
+        byte[] onPdf = HtmlDocument.toPdf(html, new HtmlDocument.Layout(null, null, false,
+                new HtmlDocument.Background(null, letterPdf, 45, 30, 30, 20)));
+        try (var reader = new com.lowagie.text.pdf.PdfReader(onPdf)) {
+            String text = new com.lowagie.text.pdf.parser.PdfTextExtractor(reader).getTextFromPage(1);
+            assertThat(text).contains("MODELO TIMBRADO").contains("Texto 1");
+        }
+        byte[] docx = HtmlDocument.toDocx(html, new HtmlDocument.Layout(null, null, true, bg));
+        try (XWPFDocument doc = new XWPFDocument(new ByteArrayInputStream(docx))) {
+            assertThat(doc.getHeaderList().get(0).getAllPictures()).hasSize(1);
+            String headerXml = doc.getHeaderList().get(0)._getHdrFtr().xmlText();
+            assertThat(headerXml).contains("behindDoc=\"1\"").contains("wp:anchor");
+            var margins = doc.getDocument().getBody().getSectPr().getPgMar();
+            assertThat(((java.math.BigInteger) margins.getTop()).intValue()).isEqualTo(2551);
+        }
+    }
+
+    @Test
+    void plataformaDaReuniaoValidaODominioDoLink() {
+        var meet = br.com.erpadv.models.MeetingPlatform.GOOGLE_MEET;
+        var zoom = br.com.erpadv.models.MeetingPlatform.ZOOM;
+        assertThat(meet.accepts("https://meet.google.com/abc-defg-hij")).isTrue();
+        assertThat(meet.accepts("https://meet.google.com.evil.test/x")).isFalse();
+        assertThat(zoom.accepts("https://us05web.zoom.us/j/123?pwd=x")).isTrue();
+        assertThat(zoom.accepts("https://zoom.us.phishing.test/j/1")).isFalse();
+        assertThat(br.com.erpadv.models.MeetingPlatform.fromUrl("https://teams.microsoft.com/l/meetup-join/x"))
+                .isEqualTo(br.com.erpadv.models.MeetingPlatform.TEAMS);
+        assertThat(br.com.erpadv.models.MeetingPlatform.fromUrl("https://jitsi.example/x")).isEqualTo(br.com.erpadv.models.MeetingPlatform.OUTRO);
+        assertThat(br.com.erpadv.models.MeetingPlatform.fromUrl(null)).isNull();
+    }
 }

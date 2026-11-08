@@ -1,0 +1,4 @@
+{
+  "/api": { "target": "https://localhost:8443", "secure": false, "changeOrigin": true, "headers": { "Origin": "https://localhost:8443" } },
+  "/config.json": { "target": "https://localhost:8443", "secure": false, "changeOrigin": true }
+}

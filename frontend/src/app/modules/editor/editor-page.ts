@@ -25,8 +25,10 @@ import { ClientsService } from '../clients/clients.service';
 import { saveBlob } from '../finance/finance.service';
 import { LegalTemplateDialogComponent, LegalVersionDialogComponent } from './editor-dialogs';
 import {
-  Draft, FieldInfo, KIND_LABELS, LegalDocKind, LegalEditorService, VersionSummary, escapeHtml, printDocument,
+  Draft, FieldInfo, KIND_LABELS, LegalDocKind, LegalEditorService, Letterhead, VersionSummary, escapeHtml,
 } from './legal-editor.service';
+import { LetterheadDialogComponent } from './letterhead-dialog';
+import { printPdf } from '../documents/file-viewer';
 import { RichTextEditorComponent } from './rich-text-editor';
 
 type Option = { id: string; label: string };
@@ -93,7 +95,8 @@ type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
       }
       <div class="ed-body">
         <app-rich-text-editor class="ed-editor" [readonly]="locked()" [fields]="catalog()" [fieldValues]="values()"
-          [header]="header()" [footer]="footer()" [pageNumbers]="pageNumbers()" (changed)="onContent($event)" />
+          [header]="header()" [footer]="footer()" [pageNumbers]="pageNumbers()" [background]="letterheadUrl()" [margins]="letterheadMargins()"
+          (changed)="onContent($event)" />
         <aside class="ed-side card" [class.open]="sideOpen()">
           <button mat-icon-button class="ed-side-toggle" (click)="sideOpen.set(!sideOpen())" [attr.aria-label]="sideOpen() ? 'Recolher painel' : 'Abrir painel'">
             <mat-icon>{{ sideOpen() ? 'chevron_right' : 'tune' }}</mat-icon></button>
@@ -123,6 +126,15 @@ type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
                     </mat-autocomplete>
                   </mat-form-field>
                   @if ((d.clientId || d.caseId) && !locked()) { <button mat-button (click)="relink(null, null)"><mat-icon>link_off</mat-icon>Remover vínculos</button> }
+                  <h4>Papel timbrado</h4>
+                  <mat-form-field subscriptSizing="dynamic">
+                    <mat-label>Papel</mat-label>
+                    <mat-select [ngModel]="letterheadId()" (ngModelChange)="setLetterhead($event)" [disabled]="locked()">
+                      <mat-option value="">Folha em branco</mat-option>
+                      @for (l of letterheads(); track l.id) { <mat-option [value]="l.id">{{ l.name }}{{ l.isDefault ? ' (padrão)' : '' }}</mat-option> }
+                    </mat-select>
+                  </mat-form-field>
+                  <button mat-button (click)="manageLetterheads()"><mat-icon>tune</mat-icon>Gerenciar papéis timbrados</button>
                   <h4>Página</h4>
                   <mat-form-field subscriptSizing="dynamic">
                     <mat-label>Cabeçalho</mat-label>
@@ -211,6 +223,13 @@ export class EditorPageComponent implements OnDestroy {
   readonly header = signal<string | null>(null);
   readonly footer = signal<string | null>(null);
   readonly pageNumbers = signal(true);
+  readonly letterheads = signal<Letterhead[]>([]);
+  readonly letterheadId = signal('');
+  readonly letterheadUrl = signal<string | null>(null);
+  readonly letterheadMargins = computed(() => {
+    const l = this.letterheads().find((x) => x.id === this.letterheadId());
+    return l ? { top: l.marginTop, bottom: l.marginBottom, left: l.marginLeft, right: l.marginRight } : null;
+  });
   readonly missing = signal<string[]>([]);
   readonly catalog = signal<FieldInfo[]>([]);
   readonly values = signal<Record<string, string | null>>({});
@@ -240,6 +259,7 @@ export class EditorPageComponent implements OnDestroy {
         this.apply(d, true);
         this.busy.set(false);
         this.loadFields();
+        this.loadLetterheads();
       },
       error: () => { this.busy.set(false); void this.router.navigate(['/editor-juridico']); },
     });
@@ -267,12 +287,43 @@ export class EditorPageComponent implements OnDestroy {
       this.header.set(d.header);
       this.footer.set(d.footer);
       this.pageNumbers.set(d.pageNumbers);
+      this.letterheadId.set(d.letterheadId ?? '');
+      this.refreshLetterheadImage();
       this.content = d.content;
       this.editor().setHtml(d.content);
       this.clientSearch.setValue(d.clientId ? { id: d.clientId, label: d.clientName ?? 'Cliente' } : '', { emitEvent: false });
       this.caseSearch.setValue(d.caseId ? { id: d.caseId, label: d.caseNumber ?? 'Processo sem CNJ' } : '', { emitEvent: false });
     }
     this.savedAt.set(new Date(d.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+  }
+
+  private loadLetterheads(): void {
+    this.service.letterheads().subscribe((list) => {
+      this.letterheads.set(list);
+      if (this.letterheadId() && !list.some((l) => l.id === this.letterheadId())) this.letterheadId.set('');
+      this.refreshLetterheadImage();
+    });
+  }
+
+  private refreshLetterheadImage(): void {
+    const id = this.letterheadId();
+    if (!id) {
+      this.letterheadUrl.set(null);
+      return;
+    }
+    this.service.letterheadImage(id).subscribe({ next: (url) => { if (this.letterheadId() === id) this.letterheadUrl.set(url); }, error: () => this.letterheadUrl.set(null) });
+  }
+
+  setLetterhead(id: string): void {
+    this.letterheadId.set(id);
+    this.refreshLetterheadImage();
+    // Com timbrado, o cabeçalho de texto costuma ser redundante.
+    if (id && this.header()) this.toast.info('O cabeçalho de texto continua sendo impresso — apague-o se o papel timbrado já identifica o escritório.');
+    this.markDirty();
+  }
+
+  manageLetterheads(): void {
+    this.dialog.open(LetterheadDialogComponent, { width: '960px', maxWidth: '98vw' }).afterClosed().subscribe(() => this.loadLetterheads());
   }
 
   private loadFields(): void {
@@ -300,6 +351,7 @@ export class EditorPageComponent implements OnDestroy {
     return {
       title: this.title().trim() || 'Documento sem título', kind: this.kind(), content: this.content, header: this.header() || null,
       footer: this.footer() || null, pageNumbers: this.pageNumbers(), clientId: d.clientId, caseId: d.caseId,
+      letterheadId: this.letterheadId(),
     };
   }
 
@@ -413,8 +465,18 @@ export class EditorPageComponent implements OnDestroy {
     }));
   }
 
+  /** Imprime exatamente o PDF gerado (papel timbrado, cabeçalho, rodapé e numeração). */
   print(): void {
-    printDocument(this.title(), this.content, this.header(), this.footer(), this.pageNumbers());
+    const d = this.draft();
+    if (!d) return;
+    this.busy.set(true);
+    this.save(() => this.service.export(d.id, 'pdf').subscribe({
+      next: (r) => {
+        printPdf(r.body as Blob, this.title()).catch(() => this.toast.error('Não foi possível preparar a impressão.'))
+          .finally(() => this.busy.set(false));
+      },
+      error: () => this.busy.set(false),
+    }));
   }
 
   toCentral(format: 'pdf' | 'docx'): void {

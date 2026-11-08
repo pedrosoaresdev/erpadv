@@ -1,6 +1,6 @@
 import { HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, map, shareReplay } from 'rxjs';
 import { ApiService } from '../../core/api/api.service';
 import { StoredDocument } from '../documents/documents.service';
 
@@ -40,6 +40,28 @@ export interface LegalTemplate {
   createdByName: string | null;
 }
 
+export interface Letterhead {
+  id: string;
+  name: string;
+  hasPdf: boolean;
+  marginTop: number;
+  marginBottom: number;
+  marginLeft: number;
+  marginRight: number;
+  isDefault: boolean;
+  createdByName: string | null;
+  createdAt: string;
+}
+
+export interface LetterheadMeta {
+  name: string;
+  marginTop: number;
+  marginBottom: number;
+  marginLeft: number;
+  marginRight: number;
+  isDefault: boolean;
+}
+
 export interface FieldInfo {
   key: string;
   label: string;
@@ -77,6 +99,7 @@ export interface Draft extends DraftSummary {
   header: string | null;
   footer: string | null;
   pageNumbers: boolean;
+  letterheadId: string | null;
   finalizedAt: string | null;
   finalizedByName: string | null;
   createdByName: string | null;
@@ -92,6 +115,8 @@ export interface DraftUpdate {
   pageNumbers: boolean;
   clientId: string | null;
   caseId: string | null;
+  /** '' = sem papel timbrado. */
+  letterheadId: string;
 }
 
 export interface VersionSummary {
@@ -123,6 +148,7 @@ export interface VersionDetail {
 export class LegalEditorService {
   private readonly api = inject(ApiService);
   private readonly base = '/legal-editor';
+  private readonly imageCache = new Map<string, Observable<string>>();
 
   templates(): Observable<LegalTemplate[]> {
     return this.api.get(`${this.base}/templates`);
@@ -134,6 +160,38 @@ export class LegalEditorService {
 
   deleteTemplate(id: string): Observable<void> {
     return this.api.delete(`${this.base}/templates/${encodeURIComponent(id)}`);
+  }
+
+  letterheads(): Observable<Letterhead[]> {
+    return this.api.get(`${this.base}/letterheads`);
+  }
+
+  createLetterhead(meta: LetterheadMeta, image: Blob, imageName: string, pdf: File | null): Observable<Letterhead> {
+    const form = new FormData();
+    form.append('meta', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+    form.append('image', image, imageName);
+    if (pdf) form.append('pdf', pdf, pdf.name);
+    return this.api.postForm(`${this.base}/letterheads`, form);
+  }
+
+  updateLetterhead(id: string, meta: LetterheadMeta): Observable<Letterhead> {
+    return this.api.put(`${this.base}/letterheads/${encodeURIComponent(id)}`, meta);
+  }
+
+  deleteLetterhead(id: string): Observable<void> {
+    this.imageCache.delete(id);
+    return this.api.delete(`${this.base}/letterheads/${encodeURIComponent(id)}`);
+  }
+
+  /** URL local (blob) da imagem do papel timbrado, em cache durante a sessão. */
+  letterheadImage(id: string): Observable<string> {
+    let cached = this.imageCache.get(id);
+    if (!cached) {
+      cached = this.api.getBlob(`${this.base}/letterheads/${encodeURIComponent(id)}/image`)
+        .pipe(map((r) => URL.createObjectURL(r.body as Blob)), shareReplay({ bufferSize: 1, refCount: false }));
+      this.imageCache.set(id, cached);
+    }
+    return cached;
   }
 
   fields(clientId: string | null, caseId: string | null, lawyerUid?: string | null): Observable<FieldsResponse> {
@@ -150,7 +208,7 @@ export class LegalEditorService {
     return this.api.get(`${this.base}/documents/${encodeURIComponent(id)}`);
   }
 
-  create(body: { title: string | null; kind: LegalDocKind | null; templateId: string; clientId: string | null; caseId: string | null; lawyerUid: string | null }): Observable<Draft> {
+  create(body: { title: string | null; kind: LegalDocKind | null; templateId: string; clientId: string | null; caseId: string | null; lawyerUid: string | null; letterheadId?: string | null }): Observable<Draft> {
     return this.api.post(`${this.base}/documents`, body);
   }
 
@@ -254,47 +312,4 @@ export function escapeHtml(text: string): string {
 export function plainText(html: string): string {
   const doc = new DOMParser().parseFromString(`<body>${html ?? ''}</body>`, 'text/html');
   return doc.body.textContent ?? '';
-}
-
-/** Escapa para uso em {@code content: "..."} do CSS de impressão. */
-function cssString(text: string): string {
-  return '"' + text.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, '\\A ') + '"';
-}
-
-/** Imprime o documento com cabeçalho, rodapé e numeração (caixas de margem do @page). */
-export function printDocument(title: string, html: string, header: string | null, footer: string | null, pageNumbers: boolean): void {
-  const frame = document.createElement('iframe');
-  frame.setAttribute('aria-hidden', 'true');
-  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
-  document.body.appendChild(frame);
-  const doc = frame.contentDocument!;
-  doc.open();
-  doc.write('<!doctype html><html><head><meta charset="utf-8"><title></title></head><body></body></html>');
-  doc.close();
-  doc.title = title;
-  const style = doc.createElement('style');
-  style.textContent = `
-    @page { size: A4; margin: ${header ? '30mm' : '25mm'} 20mm 25mm 30mm;
-      ${header ? `@top-center { content: ${cssString(header)}; white-space: pre; font: 9pt 'Times New Roman', serif; color: #333; vertical-align: bottom; padding-bottom: 4mm; border-bottom: .3pt solid #999; }` : ''}
-      ${footer ? `@bottom-center { content: ${cssString(footer)}; white-space: pre; font: 9pt 'Times New Roman', serif; color: #333; }` : ''}
-      ${pageNumbers ? `@bottom-right { content: "Página " counter(page) " de " counter(pages); font: 9pt 'Times New Roman', serif; color: #333; }` : ''}
-    }
-    body { font: 12pt/1.5 'Times New Roman', Times, serif; color: #000; margin: 0; }
-    p { margin: 0 0 8pt; text-align: justify; }
-    h1 { font-size: 15pt; text-align: center; margin: 12pt 0 10pt; }
-    h2 { font-size: 13pt; margin: 12pt 0 6pt; }
-    h3 { font-size: 12pt; margin: 10pt 0 6pt; }
-    blockquote { margin: 0 18pt 8pt 36pt; }
-    table { width: 100%; border-collapse: collapse; margin: 4pt 0 10pt; }
-    td, th { border: .5pt solid #000; padding: 4pt 6pt; font-size: 11pt; text-align: left; vertical-align: top; }
-    hr.page-break { break-after: page; border: 0; margin: 0; }
-    span.field { background: none; }
-  `;
-  doc.head.appendChild(style);
-  doc.body.innerHTML = sanitizeEditorHtml(html);
-  const win = frame.contentWindow!;
-  const done = () => setTimeout(() => frame.remove(), 1000);
-  win.addEventListener('afterprint', done, { once: true });
-  setTimeout(() => { win.focus(); win.print(); }, 50);
-  setTimeout(done, 120_000);
 }

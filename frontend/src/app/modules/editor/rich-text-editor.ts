@@ -78,7 +78,9 @@ import { FieldInfo, escapeHtml, plainText, sanitizeEditorHtml } from './legal-ed
         </div>
       }
       <div class="rte-scroll">
-        <div class="rte-paper" [class.rte-compact]="compact()">
+        <div class="rte-paper" [class.rte-compact]="compact()" [class.rte-lh]="!!background()"
+          [style.background-image]="background() ? 'url(' + background() + ')' : null"
+          [style.padding]="margins() ? margins()!.top + 'mm ' + margins()!.right + 'mm ' + margins()!.bottom + 'mm ' + margins()!.left + 'mm' : null">
           @if (header()) { <div class="rte-hf rte-head">{{ header() }}</div> }
           <div #area class="rte-area" [attr.contenteditable]="!readonly()" spellcheck="true" lang="pt-BR" role="textbox" aria-multiline="true"
             [attr.aria-label]="label()" (input)="onInput()" (paste)="onPaste($event)" (keyup)="refreshState()" (mouseup)="refreshState()"></div>
@@ -104,6 +106,8 @@ import { FieldInfo, escapeHtml, plainText, sanitizeEditorHtml } from './legal-ed
     .rte-paper { width: 794px; max-width: 100%; margin: 0 auto; background: #fff; color: #111; box-shadow: 0 2px 12px rgba(0,0,0,.18);
       padding: 56px 76px 56px 113px; box-sizing: border-box; min-height: 1123px; display: flex; flex-direction: column; }
     .rte-paper.rte-compact { min-height: 520px; padding: 32px 40px; }
+    .rte-paper.rte-lh { width: 210mm; max-width: none; min-height: 297mm; background-size: 210mm 297mm; background-repeat: repeat-y; background-position: top center; }
+    .rte-paper.rte-lh .rte-head { border-bottom: 0; }
     .rte-hf { font: 9pt 'Times New Roman', Times, serif; color: #555; text-align: center; white-space: pre-line; }
     .rte-head { border-bottom: .5px solid #bbb; padding-bottom: 8px; margin-bottom: 20px; }
     .rte-foot { margin-top: auto; padding-top: 24px; display: flex; justify-content: center; gap: 16px; position: relative; }
@@ -124,7 +128,7 @@ import { FieldInfo, escapeHtml, plainText, sanitizeEditorHtml } from './legal-ed
     .rte-readonly .rte-area { cursor: default; }
     .rte-status { font-size: 12px; color: var(--app-text-muted); padding: 4px 12px; border-top: 1px solid var(--app-border); background: var(--app-surface); }
     @media (max-width: 860px) {
-      .rte-paper { padding: 24px 18px; min-height: 70vh; }
+      .rte-paper:not(.rte-lh) { padding: 24px 18px; min-height: 70vh; }
       .rte-scroll { padding: 8px 4px; }
       .rte-area hr.page-break { margin: 18px -8px; }
     }
@@ -141,6 +145,9 @@ export class RichTextEditorComponent implements AfterViewInit, OnDestroy {
   readonly pageNumbers = input(false);
   readonly compact = input(false);
   readonly label = input('Conteúdo do documento');
+  /** Papel timbrado: URL local da imagem A4 e margens (mm) da área de texto. */
+  readonly background = input<string | null>(null);
+  readonly margins = input<{ top: number; bottom: number; left: number; right: number } | null>(null);
   readonly changed = output<string>();
 
   private readonly area = viewChild.required<ElementRef<HTMLDivElement>>('area');
