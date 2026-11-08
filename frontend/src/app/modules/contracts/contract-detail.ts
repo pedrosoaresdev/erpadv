@@ -23,6 +23,7 @@ import { saveBlob } from '../finance/finance.service';
 import { TransactionsTableComponent } from '../finance/transactions-table';
 import { ContractFormDialogComponent } from './contract-form-dialog';
 import { feeSummary } from './contracts-list';
+import { ContractRenewDialogComponent } from './renew-dialog';
 import { CONTRACT_STATUS_LABELS, CONTRACT_STATUS_TONE, Contract, ContractTemplate, ContractsService } from './contracts.service';
 
 @Component({
@@ -53,6 +54,7 @@ import { CONTRACT_STATUS_LABELS, CONTRACT_STATUS_TONE, Contract, ContractTemplat
               <mat-menu #more="matMenu" xPosition="before">
                 <button mat-menu-item (click)="signedPicker.click()"><mat-icon>upload_file</mat-icon>{{ c.signedDocumentId ? 'Substituir contrato assinado' : 'Anexar contrato assinado' }}</button>
                 @if (c.signedDocumentId) { <button mat-menu-item (click)="openSigned()"><mat-icon>visibility</mat-icon>Ver contrato assinado</button> }
+                @if (c.status === 'ATIVO') { <button mat-menu-item (click)="renew(c)"><mat-icon>autorenew</mat-icon>Renovar contrato</button> }
                 @if (c.status === 'ATIVO') { <button mat-menu-item (click)="close()"><mat-icon>task_alt</mat-icon>Encerrar contrato</button> }
                 @if (c.status === 'RASCUNHO' || c.status === 'ATIVO') { <button mat-menu-item class="danger" (click)="cancel()"><mat-icon>block</mat-icon>Cancelar contrato</button> }
               </mat-menu>
@@ -70,6 +72,10 @@ import { CONTRACT_STATUS_LABELS, CONTRACT_STATUS_TONE, Contract, ContractTemplat
                   <dt>Objeto</dt><dd class="pre">{{ c.object }}</dd>
                   <dt>Responsável</dt><dd>{{ c.responsibleName }}</dd>
                   <dt>Vigência</dt><dd>{{ c.startDate | brDate }}{{ c.endDate ? ' a ' + (c.endDate | brDate) : ' (indeterminada)' }}</dd>
+                  @if (c.renewals?.length) {
+                    <dt>Renovações</dt>
+                    <dd>@for (r of c.renewals; track $index) { <div class="small">{{ r.renewedOn | brDate }}: até {{ r.newEndDate | brDate }}{{ r.monthsAdded ? ' · +' + r.monthsAdded + ' mês(es)' : '' }}{{ r.note ? ' · ' + r.note : '' }} · {{ r.byName }}</div> }</dd>
+                  }
                   @if (c.activatedAt) { <dt>Ativado em</dt><dd>{{ c.activatedAt | brDate: true }}</dd> }
                   @if (c.cancelReason) { <dt>Cancelamento</dt><dd>{{ c.cancelReason }}</dd> }
                 </dl>
@@ -235,6 +241,12 @@ export class ContractDetailComponent {
   activate(): void {
     this.confirm('Ativar contrato', 'As cobranças dos honorários (fixos, parcelas ou mensalidades) serão lançadas no financeiro como contas a receber.', 'Ativar')
       .subscribe((ok) => { if (ok) this.service.action(this.id(), 'activate').subscribe((c) => { this.set(c); this.refresh.update((v) => v + 1); this.toast.success('Contrato ativado e cobranças geradas.'); }); });
+  }
+
+  renew(c: Contract): void {
+    this.dialog.open(ContractRenewDialogComponent, { data: c, width: '560px', maxWidth: '96vw' }).afterClosed().subscribe((r?: Contract) => {
+      if (r) { this.set(r); this.refresh.update((v) => v + 1); this.toast.success('Contrato renovado.'); }
+    });
   }
 
   close(): void {

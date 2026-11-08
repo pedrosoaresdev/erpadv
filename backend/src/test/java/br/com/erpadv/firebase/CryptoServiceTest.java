@@ -25,8 +25,10 @@ class CryptoServiceTest {
     @Test
     void detectaAdulteracao() {
         String enc = crypto.encrypt("segredo");
-        char last = enc.charAt(enc.length() - 2);
-        String tampered = enc.substring(0, enc.length() - 2) + (last == 'A' ? 'B' : 'A') + enc.charAt(enc.length() - 1);
+        // altera um caractere do meio (os últimos podem carregar só bits de preenchimento do Base64)
+        int i = enc.length() / 2;
+        char c = enc.charAt(i);
+        String tampered = enc.substring(0, i) + (c == 'A' ? 'B' : 'A') + enc.substring(i + 1);
         assertThatThrownBy(() -> crypto.decrypt(tampered)).isInstanceOf(IllegalStateException.class);
     }
 

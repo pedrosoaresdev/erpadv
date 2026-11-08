@@ -4,6 +4,13 @@ import { Observable } from 'rxjs';
 import { ApiService } from '../../core/api/api.service';
 import { CursorPage } from '../../core/models/models';
 import {
+  BankAccount,
+  CollectionChannel,
+  CollectionDraft,
+  CollectionOutcome,
+  CollectionRecord,
+  CostCenter,
+  Statement,
   DelinquencyReport,
   FinanceCategory,
   FinanceDirection,
@@ -22,6 +29,7 @@ export interface TransactionQuery {
   category?: FinanceCategory | '';
   clientId?: string;
   contractId?: string;
+  costCenterId?: string;
   from?: string;
   to?: string;
 }
@@ -42,7 +50,7 @@ export class FinanceService {
     return this.api.put(`/finance/transactions/${encodeURIComponent(id)}`, body);
   }
 
-  pay(id: string, body: { paidDate: string; paidAmountCents: number; paymentMethod: PaymentMethod }): Observable<Transaction> {
+  pay(id: string, body: { paidDate: string; paidAmountCents: number; paymentMethod: PaymentMethod; bankAccountId?: string | null }): Observable<Transaction> {
     return this.api.post(`/finance/transactions/${encodeURIComponent(id)}/pay`, body);
   }
 
@@ -78,6 +86,52 @@ export class FinanceService {
 
   delinquency(): Observable<DelinquencyReport> {
     return this.api.get('/finance/delinquency');
+  }
+
+  // ------------------------------------------------------------------ cadastros auxiliares
+
+  costCenters(): Observable<CostCenter[]> {
+    return this.api.get('/finance/cost-centers');
+  }
+
+  saveCostCenter(id: string | null, body: { name: string; code: string | null; description: string | null; active: boolean }): Observable<CostCenter> {
+    return id ? this.api.put(`/finance/cost-centers/${encodeURIComponent(id)}`, body) : this.api.post('/finance/cost-centers', body);
+  }
+
+  deleteCostCenter(id: string): Observable<void> {
+    return this.api.delete(`/finance/cost-centers/${encodeURIComponent(id)}`);
+  }
+
+  accounts(): Observable<BankAccount[]> {
+    return this.api.get('/finance/bank-accounts');
+  }
+
+  saveAccount(id: string | null, body: Partial<BankAccount>): Observable<BankAccount> {
+    return id ? this.api.put(`/finance/bank-accounts/${encodeURIComponent(id)}`, body) : this.api.post('/finance/bank-accounts', body);
+  }
+
+  deleteAccount(id: string): Observable<void> {
+    return this.api.delete(`/finance/bank-accounts/${encodeURIComponent(id)}`);
+  }
+
+  statement(id: string, from: string, to: string): Observable<Statement> {
+    return this.api.get(`/finance/bank-accounts/${encodeURIComponent(id)}/statement`, { from, to });
+  }
+
+  recibo(id: string): Observable<HttpResponse<Blob>> {
+    return this.api.getBlob(`/finance/transactions/${encodeURIComponent(id)}/recibo`);
+  }
+
+  collections(clientId?: string | null): Observable<CollectionRecord[]> {
+    return this.api.get('/finance/collections', { clientId: clientId ?? null });
+  }
+
+  collectionDraft(clientId: string): Observable<CollectionDraft> {
+    return this.api.get('/finance/collections/draft', { clientId });
+  }
+
+  registerCollection(body: { transactionIds: string[]; channel: CollectionChannel; outcome: CollectionOutcome; message: string | null; promisedDate: string | null }): Observable<CollectionRecord> {
+    return this.api.post('/finance/collections', body);
   }
 }
 

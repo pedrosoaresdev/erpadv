@@ -32,6 +32,17 @@ public final class CrmRepositories {
     }
 
     @Repository
+    public static class Proposals extends FirestoreRepository<br.com.erpadv.models.LeadProposal> {
+        public Proposals(Firestore db, FirestoreMapper mapper) {
+            super(db, mapper, br.com.erpadv.models.LeadProposal.class, "lead_proposals");
+        }
+
+        public void delete(String officeId, String id) {
+            br.com.erpadv.firebase.Futures.await(collection(officeId).document(id).delete());
+        }
+    }
+
+    @Repository
     public static class Activities extends FirestoreRepository<LeadActivity> {
         public Activities(Firestore db, FirestoreMapper mapper) {
             super(db, mapper, LeadActivity.class, "lead_activities");

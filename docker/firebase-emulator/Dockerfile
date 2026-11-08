@@ -15,5 +15,7 @@ EXPOSE 4000 4400 8080 9099 9199
 HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
   CMD curl -fs http://127.0.0.1:4400/emulators >/dev/null || exit 1
 
-# Dados persistem no volume /data (importados no start e exportados ao parar).
-CMD ["sh", "-c", "firebase emulators:start --project ${FIREBASE_PROJECT_ID:-demo-erpadv} --only auth,firestore,storage,ui --import=/data --export-on-exit=/data"]
+# Dados persistem no volume /data, na subpasta export (a exportação substitui a pasta de destino, o que não é
+# possível na raiz de um volume). O "exec" faz o Firebase CLI
+# receber o SIGTERM do "docker stop" e exportar antes de sair (com "sh" no meio o sinal não chegava).
+CMD ["sh", "-c", "exec firebase emulators:start --project ${FIREBASE_PROJECT_ID:-demo-erpadv} --only auth,firestore,storage,ui --import=/data/export --export-on-exit=/data/export"]

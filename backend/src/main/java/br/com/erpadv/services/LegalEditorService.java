@@ -666,6 +666,12 @@ public class LegalEditorService {
         return letterheads.findById(officeId, id).orElseThrow(() -> new NotFoundException("Papel timbrado"));
     }
 
+    /** Papel timbrado padrão do escritório (recibos, propostas e demais documentos gerados pelo sistema). */
+    public HtmlDocument.Background defaultBackground(String officeId) {
+        String id = defaultLetterheadId(officeId);
+        return id == null ? null : background(officeId, id, false);
+    }
+
     /** Fundo para exportação; papel excluído = folha branca. No DOCX usa sempre a imagem. */
     private HtmlDocument.Background background(String officeId, String letterheadId, boolean docx) {
         if (letterheadId == null || officeId == null) {

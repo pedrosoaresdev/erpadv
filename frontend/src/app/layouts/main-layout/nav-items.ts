@@ -38,11 +38,11 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'Gestão',
     items: [
       { label: 'Financeiro', icon: 'account_balance_wallet', route: '/financeiro', permission: 'FINANCE_READ' },
-      { label: 'Honorários', icon: 'payments', permission: 'CONTRACTS_READ', phase: 3 },
+      { label: 'Honorários', icon: 'payments', route: '/honorarios', permission: 'DASHBOARD_VIEW' },
       { label: 'Contratos', icon: 'handshake', route: '/contratos', permission: 'CONTRACTS_READ' },
       { label: 'Documentos', icon: 'folder_open', route: '/documentos', permission: 'DOCUMENTS_READ' },
       { label: 'Editor Jurídico', icon: 'edit_document', route: '/editor-juridico', permission: 'DOCUMENTS_READ' },
-      { label: 'Relatórios', icon: 'monitoring', permission: 'REPORTS_VIEW', phase: 3 },
+      { label: 'Relatórios', icon: 'monitoring', route: '/relatorios', permission: 'REPORTS_VIEW' },
     ],
   },
   {

@@ -256,6 +256,56 @@ public class ContractService {
         return ContractResponse.of(c, FinanceService.today(), true);
     }
 
+    /**
+     * Renova o contrato ativo: prorroga o término e, no partido mensal, gera as novas mensalidades a partir da
+     * última parcela (com reajuste opcional). Fica no histórico do contrato e na auditoria.
+     */
+    public ContractResponse renew(AuthenticatedUser user, String id, br.com.erpadv.dto.ContractDtos.RenewRequest req) {
+        Contract c = requireActive(user, id);
+        LocalDate previous = c.getEndDate();
+        LocalDate floor = previous != null && previous.isAfter(c.getStartDate()) ? previous : c.getStartDate();
+        if (!req.newEndDate().isAfter(floor)) {
+            throw new BusinessException("INVALID_RENEWAL", "O novo término deve ser posterior ao término atual.");
+        }
+        int added = req.monthsAdded() == null ? 0 : req.monthsAdded();
+        List<FinancialTransaction> items = new ArrayList<>();
+        if (c.getFeeModel() == FeeModel.MENSAL && added > 0) {
+            long monthly = req.monthlyCents() != null ? req.monthlyCents() : c.getMonthlyCents();
+            int current = c.getMonths() == null ? 0 : c.getMonths();
+            for (int i = 0; i < added; i++) {
+                FinancialTransaction t = receivable(c, FinanceCategory.CONTRATO, monthly, c.getFirstDueDate().plusMonths(current + i),
+                        "Partido mensal — " + c.getNumber() + " (renovação)");
+                t.setGroupId(c.getId());
+                t.setInstallmentNumber(current + i + 1);
+                t.setInstallmentCount(current + added);
+                t.setRecurrent(true);
+                items.add(t);
+            }
+            finance.createForContract(user, items);
+            c.setMonths(current + added);
+            c.setMonthlyCents(monthly);
+        } else if (added > 0) {
+            throw new BusinessException("INVALID_RENEWAL", "Meses adicionais só se aplicam ao partido mensal.");
+        }
+        Contract.Renewal r = new Contract.Renewal();
+        r.setRenewedOn(FinanceService.today());
+        r.setPreviousEndDate(previous);
+        r.setNewEndDate(req.newEndDate());
+        r.setMonthsAdded(added == 0 ? null : added);
+        r.setMonthlyCents(c.getFeeModel() == FeeModel.MENSAL && added > 0 ? c.getMonthlyCents() : null);
+        r.setNote(trim(req.note()));
+        r.setByName(user.displayName());
+        c.getRenewals().add(r);
+        c.setEndDate(req.newEndDate());
+        c.setExpiryAlertsSent(new ArrayList<>());
+        touch(user, c);
+        contracts.save(user.officeId(), c);
+        audit.record(user, "CONTRACT_RENEWED", "contract", id, c.getNumber() + " renovado até " + req.newEndDate()
+                        + (items.isEmpty() ? "" : " — " + items.size() + " nova(s) mensalidade(s)"),
+                Map.of("endDate", (previous == null ? "indeterminado" : previous.toString()) + "->" + req.newEndDate()));
+        return ContractResponse.of(c, FinanceService.today(), true);
+    }
+
     public ContractResponse close(AuthenticatedUser user, String id) {
         Contract c = requireActive(user, id);
         c.setStatus(ContractStatus.ENCERRADO);

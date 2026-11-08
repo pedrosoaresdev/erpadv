@@ -50,6 +50,10 @@ public class FinanceService {
     private final CaseService cases;
     private final StorageGateway storage;
     private final AuditService audit;
+    @org.springframework.beans.factory.annotation.Autowired
+    private br.com.erpadv.repositories.FinanceRepositories.CostCenters costCenters;
+    @org.springframework.beans.factory.annotation.Autowired
+    private br.com.erpadv.repositories.FinanceRepositories.BankAccounts bankAccounts;
 
     public FinanceService(FinancialTransactionRepository transactions, ClientRepository clients, CaseService cases,
                           StorageGateway storage, AuditService audit) {
@@ -196,6 +200,20 @@ public class FinanceService {
         t.setPaymentMethod(req.paymentMethod());
         t.setPaidAt(Instant.now());
         t.setPaidBy(user.uid());
+        t.setBankAccountId(null);
+        t.setBankAccountName(null);
+        if (req.bankAccountId() != null && !req.bankAccountId().isBlank()) {
+            if (t.getScope() != FinanceScope.ESCRITORIO) {
+                throw new BusinessException("INVALID_ACCOUNT", "Contas bancárias são do escritório; não use em lançamentos pessoais.");
+            }
+            var account = bankAccounts.findById(user.officeId(), req.bankAccountId())
+                    .orElseThrow(() -> new BusinessException("INVALID_ACCOUNT", "Conta bancária não encontrada."));
+            if (!account.isActive()) {
+                throw new BusinessException("INVALID_ACCOUNT", "Conta bancária inativa.");
+            }
+            t.setBankAccountId(account.getId());
+            t.setBankAccountName(account.getName());
+        }
         touch(user, t);
         transactions.save(user.officeId(), t);
         audit.record(user, "FINANCE_SETTLED", "finance", id,
@@ -218,6 +236,8 @@ public class FinanceService {
         t.setPaidAt(null);
         t.setPaidBy(null);
         t.setCanceledReason(null);
+        t.setBankAccountId(null);
+        t.setBankAccountName(null);
         touch(user, t);
         transactions.save(user.officeId(), t);
         audit.record(user, "FINANCE_REOPENED", "finance", id, "Lançamento reaberto (" + previous + "): " + t.getDescription());
@@ -402,6 +422,9 @@ public class FinanceService {
         if (filter.contractId() != null && !filter.contractId().isBlank()) {
             q = q.whereEqualTo("contractId", filter.contractId());
         }
+        if (filter.costCenterId() != null && !filter.costCenterId().isBlank()) {
+            q = q.whereEqualTo("costCenterId", filter.costCenterId());
+        }
         LocalDate from = filter.from();
         LocalDate to = filter.to();
         switch (filter.view() == null ? View.ABERTOS : filter.view()) {
@@ -467,6 +490,14 @@ public class FinanceService {
         }
         String counterparty = trim(req.counterparty());
         t.setCounterparty(counterparty != null ? counterparty : t.getClientName());
+        t.setCostCenterId(null);
+        t.setCostCenterName(null);
+        if (scope == FinanceScope.ESCRITORIO && req.costCenterId() != null && !req.costCenterId().isBlank()) {
+            var center = costCenters.findById(officeId, req.costCenterId())
+                    .orElseThrow(() -> new BusinessException("INVALID_COST_CENTER", "Centro de custo não encontrado."));
+            t.setCostCenterId(center.getId());
+            t.setCostCenterName(center.getName());
+        }
     }
 
     private static FinancialTransaction copy(FinancialTransaction s) {
@@ -484,6 +515,8 @@ public class FinanceService {
         t.setCounterparty(s.getCounterparty());
         t.setDocumentNumber(s.getDocumentNumber());
         t.setNotes(s.getNotes());
+        t.setCostCenterId(s.getCostCenterId());
+        t.setCostCenterName(s.getCostCenterName());
         return t;
     }
 

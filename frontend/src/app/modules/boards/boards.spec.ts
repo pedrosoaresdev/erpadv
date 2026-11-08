@@ -55,7 +55,8 @@ describe('senhas definidas pelo administrador', () => {
 
 describe('funil do CRM', () => {
   it('tem as etapas abertas antes das finais', () => {
-    expect(STAGES.map((s) => s.key)).toEqual(['NOVO', 'CONTATO', 'QUALIFICADO', 'PROPOSTA', 'NEGOCIACAO', 'GANHO', 'PERDIDO']);
+    expect(STAGES.map((s) => s.key)).toEqual(['NOVO', 'CONTATO', 'QUALIFICADO', 'REUNIAO_AGENDADA', 'PROPOSTA', 'NEGOCIACAO',
+      'CONTRATO_ENVIADO', 'GANHO', 'PERDIDO']);
     expect(STAGES.filter((s) => !s.open).map((s) => s.key)).toEqual(['GANHO', 'PERDIDO']);
   });
 });

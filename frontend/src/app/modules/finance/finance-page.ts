@@ -13,6 +13,9 @@ import { BrDatePipe, CentsPipe } from '../../shared/pipes/format.pipes';
 import { DelinquencyReport, FinanceScope, FinanceSummary } from './finance.models';
 import { FinanceService } from './finance.service';
 import { TransactionsTableComponent } from './transactions-table';
+import { CollectionDialogComponent, FinanceSetupComponent } from './finance-setup';
+import { MatDialog } from '@angular/material/dialog';
+import { ToastService } from '../../core/services/toast.service';
 
 type Period = 'mes' | '3m' | '6m' | '12m' | 'ano';
 const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
@@ -35,6 +38,7 @@ export function periodRange(p: Period, today = new Date()): { from: string; to: 
   imports: [
     RouterLink, MatButtonModule, MatButtonToggleModule, MatIconModule, MatProgressBarModule, MatTabsModule,
     PageHeaderComponent, StatCardComponent, EmptyStateComponent, ChartComponent, TransactionsTableComponent, CentsPipe, BrDatePipe,
+    FinanceSetupComponent,
   ],
   template: `
     <div class="page">
@@ -111,7 +115,7 @@ export function periodRange(p: Period, today = new Date()): { from: string; to: 
                 } @else {
                   <div class="table-wrap">
                     <table class="data">
-                      <thead><tr><th>Cliente</th><th class="r">Em atraso</th><th>Títulos</th><th>Vencimento mais antigo</th><th>Maior atraso</th></tr></thead>
+                      <thead><tr><th>Cliente</th><th class="r">Em atraso</th><th>Títulos</th><th>Vencimento mais antigo</th><th>Maior atraso</th><th></th></tr></thead>
                       <tbody>
                         @for (c of d.clients; track c.clientName) {
                           <tr>
@@ -120,6 +124,7 @@ export function periodRange(p: Period, today = new Date()): { from: string; to: 
                             <td>{{ c.count }}</td>
                             <td>{{ c.oldestDueDate | brDate }}</td>
                             <td><span class="badge" [class.danger]="c.maxDaysOverdue > 30" [class.warning]="c.maxDaysOverdue <= 30">{{ c.maxDaysOverdue }} dias</span></td>
+                            <td class="r">@if (c.clientId) { <button mat-stroked-button (click)="collect(c.clientId, c.clientName)"><mat-icon>campaign</mat-icon>Cobrar</button> }</td>
                           </tr>
                         }
                       </tbody>
@@ -130,6 +135,10 @@ export function periodRange(p: Period, today = new Date()): { from: string; to: 
               <p class="muted small">Clientes com contas vencidas são marcados automaticamente como inadimplentes no CRM; a marcação é removida ao regularizar.</p>
             } @else { <mat-progress-bar mode="indeterminate" /> }
           </div>
+        </mat-tab>
+
+        <mat-tab label="Contas e centros de custo">
+          <ng-template matTabContent><app-finance-setup /></ng-template>
         </mat-tab>
 
         <mat-tab label="DRE gerencial">
@@ -193,7 +202,15 @@ export function periodRange(p: Period, today = new Date()): { from: string; to: 
 export class FinancePageComponent {
   private readonly service = inject(FinanceService);
   private readonly auth = inject(AuthService);
+  private readonly dialog = inject(MatDialog);
+  private readonly toast = inject(ToastService);
   readonly money = money;
+
+  /** Mensagem de cobrança (WhatsApp/e-mail do próprio escritório) e registro do contato. */
+  collect(clientId: string, clientName: string): void {
+    this.dialog.open(CollectionDialogComponent, { data: { clientId, clientName }, width: '720px', maxWidth: '96vw' })
+      .afterClosed().subscribe((r) => { if (r) this.toast.success('Cobrança registrada.'); });
+  }
 
   readonly period = signal<Period>('6m');
   readonly summary = signal<FinanceSummary | null>(null);

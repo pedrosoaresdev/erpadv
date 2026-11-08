@@ -56,6 +56,8 @@ public class Contract extends BaseEntity {
     private Instant closedAt;
     private String cancelReason;
     private List<Integer> expiryAlertsSent = new ArrayList<>();
+    /** Histórico de renovações (prorrogação do término e, no partido mensal, novas mensalidades). */
+    private List<Renewal> renewals = new ArrayList<>();
     private List<String> searchTokens = new ArrayList<>();
 
     @Data
@@ -66,5 +68,16 @@ public class Contract extends BaseEntity {
         private LocalDate dueDate;
         private boolean billed;
         private String transactionId;
+    }
+
+    @Data
+    public static class Renewal {
+        private LocalDate renewedOn;
+        private LocalDate previousEndDate;
+        private LocalDate newEndDate;
+        private Integer monthsAdded;
+        private Long monthlyCents;
+        private String note;
+        private String byName;
     }
 }

@@ -26,7 +26,7 @@ services:
     volumes:
       - emulator-data:/data
     networks: [erpadv]
-    stop_grace_period: 30s
+    stop_grace_period: 90s
     logging: *default-logging
 
   backend:

@@ -142,6 +142,13 @@ public class ContractController {
         return contracts.registerSuccess(user, id, req.obtainedCents(), req.dueDate(), req.note());
     }
 
+    @PostMapping("/{id}/renew")
+    @PreAuthorize("hasAuthority('PERM_CONTRACTS_WRITE')")
+    public ContractResponse renew(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                                  @jakarta.validation.Valid @org.springframework.web.bind.annotation.RequestBody br.com.erpadv.dto.ContractDtos.RenewRequest req) {
+        return contracts.renew(user, id, req);
+    }
+
     @PostMapping("/{id}/close")
     @PreAuthorize("hasAuthority('PERM_CONTRACTS_WRITE')")
     public ContractResponse close(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {

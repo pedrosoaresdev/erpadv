@@ -3,18 +3,20 @@ import { Observable } from 'rxjs';
 import { ApiService } from '../../core/api/api.service';
 import { ClientType, LegalArea } from '../../core/models/models';
 
-export type LeadStage = 'NOVO' | 'CONTATO' | 'QUALIFICADO' | 'PROPOSTA' | 'NEGOCIACAO' | 'GANHO' | 'PERDIDO';
+export type LeadStage = 'NOVO' | 'CONTATO' | 'QUALIFICADO' | 'REUNIAO_AGENDADA' | 'PROPOSTA' | 'NEGOCIACAO' | 'CONTRATO_ENVIADO' | 'GANHO' | 'PERDIDO';
 export type LeadSource = 'INDICACAO' | 'SITE' | 'GOOGLE' | 'INSTAGRAM' | 'FACEBOOK' | 'LINKEDIN' | 'WHATSAPP' | 'EVENTO' | 'CLIENTE_ATUAL' | 'OUTRO';
 export type LeadActivityType = 'NOTA' | 'LIGACAO' | 'EMAIL' | 'REUNIAO' | 'WHATSAPP' | 'PROPOSTA' | 'ETAPA' | 'CONVERSAO';
 
 export const STAGES: { key: LeadStage; label: string; color: string; open: boolean }[] = [
-  { key: 'NOVO', label: 'Novo', color: '#7a8ca8', open: true },
-  { key: 'CONTATO', label: 'Primeiro contato', color: '#3b6fb6', open: true },
-  { key: 'QUALIFICADO', label: 'Qualificado', color: '#2c7a7b', open: true },
+  { key: 'NOVO', label: 'Novo contato', color: '#7a8ca8', open: true },
+  { key: 'CONTATO', label: 'Primeiro atendimento', color: '#3b6fb6', open: true },
+  { key: 'QUALIFICADO', label: 'Qualificação', color: '#2c7a7b', open: true },
+  { key: 'REUNIAO_AGENDADA', label: 'Reunião agendada', color: '#6b46c1', open: true },
   { key: 'PROPOSTA', label: 'Proposta enviada', color: '#b7791f', open: true },
-  { key: 'NEGOCIACAO', label: 'Negociação', color: '#c05621', open: true },
-  { key: 'GANHO', label: 'Ganho', color: '#2f855a', open: false },
-  { key: 'PERDIDO', label: 'Perdido', color: '#9b2c2c', open: false },
+  { key: 'NEGOCIACAO', label: 'Aguardando decisão', color: '#c05621', open: true },
+  { key: 'CONTRATO_ENVIADO', label: 'Contrato enviado', color: '#12305a', open: true },
+  { key: 'GANHO', label: 'Cliente convertido', color: '#2f855a', open: false },
+  { key: 'PERDIDO', label: 'Atendimento encerrado', color: '#9b2c2c', open: false },
 ];
 
 export const SOURCE_LABELS: Record<LeadSource, string> = {

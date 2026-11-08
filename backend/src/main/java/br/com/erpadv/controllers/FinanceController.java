@@ -65,9 +65,10 @@ public class FinanceController {
                                                 @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
                                                 @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
                                                 @RequestParam(required = false) String contractId,
+                                                @RequestParam(required = false) String costCenterId,
                                                 @RequestParam(required = false) String cursor,
                                                 @RequestParam(defaultValue = "30") int size) {
-        return finance.list(user, new TransactionFilter(scope, direction, view, category, clientId, from, to, contractId), cursor, size);
+        return finance.list(user, new TransactionFilter(scope, direction, view, category, clientId, from, to, contractId, costCenterId), cursor, size);
     }
 
     @GetMapping("/transactions/export")

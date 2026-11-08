@@ -9,13 +9,15 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { Observable, catchError, debounceTime, filter, of, startWith, switchMap } from 'rxjs';
+import { Observable, catchError, debounceTime, filter, map, of, startWith, switchMap } from 'rxjs';
 import { ClientSummary } from '../../core/models/models';
 import { CentsPipe } from '../../shared/pipes/format.pipes';
 import { centsToInput, parseMoneyToCents } from '../../shared/validators/br-validators';
 import { ClientsService } from '../clients/clients.service';
 import {
+  BankAccount,
   CATEGORY_LABELS,
+  CostCenter,
   EXPENSE_CATEGORIES,
   FinanceCategory,
   FinanceDirection,
@@ -135,6 +137,15 @@ export interface TransactionDialogData {
             <input matInput formControlName="counterparty" maxlength="200" />
           </mat-form-field>
         }
+        @if (data.scope === 'ESCRITORIO' && costCenters().length) {
+          <mat-form-field class="c6">
+            <mat-label>Centro de custo</mat-label>
+            <mat-select formControlName="costCenterId">
+              <mat-option value="">Nenhum</mat-option>
+              @for (c of costCenters(); track c.id) { @if (c.active || c.id === form.controls.costCenterId.value) { <mat-option [value]="c.id">{{ c.name }}{{ c.code ? ' (' + c.code + ')' : '' }}</mat-option> } }
+            </mat-select>
+          </mat-form-field>
+        }
         <mat-form-field class="c6">
           <mat-label>Nº do documento / nota fiscal</mat-label>
           <input matInput formControlName="documentNumber" maxlength="60" />
@@ -170,6 +181,8 @@ export class TransactionDialogComponent {
   readonly paymentLabels = PAYMENT_LABELS;
   readonly methods = Object.keys(PAYMENT_LABELS) as PaymentMethod[];
   readonly schedule = signal<'UNICO' | 'PARCELADO' | 'RECORRENTE'>('UNICO');
+  readonly costCenters = toSignal(this.data.scope === 'ESCRITORIO' ? this.service.costCenters().pipe(catchError(() => of([] as CostCenter[]))) : of([] as CostCenter[]),
+    { initialValue: [] as CostCenter[] });
   readonly saving = signal(false);
   readonly clientOptions = signal<ClientSummary[]>([]);
 
@@ -187,6 +200,7 @@ export class TransactionDialogComponent {
     counterparty: [this.t?.counterparty ?? ''],
     documentNumber: [this.t?.documentNumber ?? ''],
     notes: [this.t?.notes ?? ''],
+    costCenterId: [this.t?.costCenterId ?? ''],
     count: [2, [Validators.min(2), Validators.max(60)]],
   });
 
@@ -235,6 +249,7 @@ export class TransactionDialogComponent {
       scope: this.data.scope,
       installments: !this.t && this.schedule() === 'PARCELADO' ? this.count() : 1,
       recurrenceMonths: !this.t && this.schedule() === 'RECORRENTE' ? this.count() : 1,
+      costCenterId: this.data.scope === 'ESCRITORIO' ? v.costCenterId || null : null,
     };
     this.saving.set(true);
     const request: Observable<Transaction | Transaction[]> = this.t ? this.service.update(this.t.id, body) : this.service.create(body);
@@ -264,6 +279,16 @@ export class TransactionDialogComponent {
             @for (p of methods; track p) { <mat-option [value]="p">{{ paymentLabels[p] }}</mat-option> }
           </mat-select>
         </mat-form-field>
+        @if (t.scope === 'ESCRITORIO' && accounts().length) {
+          <mat-form-field>
+            <mat-label>{{ t.direction === 'RECEITA' ? 'Conta de entrada' : 'Conta de saída' }}</mat-label>
+            <mat-select formControlName="bankAccountId">
+              <mat-option value="">Não informar</mat-option>
+              @for (a of accounts(); track a.id) { <mat-option [value]="a.id">{{ a.name }}{{ a.accountMasked ? ' · ' + a.accountMasked : '' }}</mat-option> }
+            </mat-select>
+            <mat-hint>Atualiza o saldo e o extrato da conta</mat-hint>
+          </mat-form-field>
+        }
       </form>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
@@ -285,7 +310,10 @@ export class PayDialogComponent {
     paidDate: [localToday(), Validators.required],
     amount: [centsToInput(this.t.amountCents), moneyValidator],
     paymentMethod: [(this.t.paymentMethod ?? 'PIX') as PaymentMethod, Validators.required],
+    bankAccountId: [''],
   });
+  readonly accounts = toSignal(this.service.accounts().pipe(map((list) => list.filter((a) => a.active)), catchError(() => of([] as BankAccount[]))),
+    { initialValue: [] as BankAccount[] });
 
   save(): void {
     if (this.form.invalid) {
@@ -295,7 +323,8 @@ export class PayDialogComponent {
     const v = this.form.getRawValue();
     this.saving.set(true);
     this.service
-      .pay(this.t.id, { paidDate: v.paidDate, paidAmountCents: parseMoneyToCents(v.amount) ?? 0, paymentMethod: v.paymentMethod })
+      .pay(this.t.id, { paidDate: v.paidDate, paidAmountCents: parseMoneyToCents(v.amount) ?? 0, paymentMethod: v.paymentMethod,
+        bankAccountId: v.bankAccountId || null })
       .subscribe({ next: (r) => this.ref.close(r), error: () => this.saving.set(false) });
   }
 }

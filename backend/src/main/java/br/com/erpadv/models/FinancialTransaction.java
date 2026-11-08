@@ -31,6 +31,14 @@ public class FinancialTransaction extends BaseEntity {
     private String contractId;
     /** Cliente (receitas) ou fornecedor/favorecido (despesas). */
     private String counterparty;
+    /** Centro de custo (gestão por área/unidade). */
+    private String costCenterId;
+    private String costCenterName;
+    /** Conta em que a baixa foi registrada. */
+    private String bankAccountId;
+    private String bankAccountName;
+    /** Número do recibo emitido (receitas pagas). */
+    private String receiptNumber;
     private String documentNumber;
     private String notes;
     /** Parcelamento ou recorrência: lançamentos do mesmo grupo. */

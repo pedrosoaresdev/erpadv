@@ -35,6 +35,8 @@ import java.util.List;
 public class CrmController {
 
     private final CrmService crm;
+    @org.springframework.beans.factory.annotation.Autowired
+    private br.com.erpadv.services.ProposalService proposalService;
 
     public CrmController(CrmService crm) {
         this.crm = crm;
@@ -91,6 +93,56 @@ public class CrmController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
         crm.delete(user, id);
+    }
+
+    // ------------------------------------------------------------------ propostas
+
+    @GetMapping("/leads/{id}/proposals")
+    @PreAuthorize("hasAuthority('PERM_CRM_USE')")
+    public java.util.List<br.com.erpadv.dto.ProposalDtos.ProposalResponse> proposals(@AuthenticationPrincipal AuthenticatedUser user,
+                                                                                    @PathVariable String id) {
+        return proposalService.list(user, id);
+    }
+
+    @PostMapping("/leads/{id}/proposals")
+    @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('PERM_CRM_USE')")
+    public br.com.erpadv.dto.ProposalDtos.ProposalResponse createProposal(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                                                                         @Valid @RequestBody br.com.erpadv.dto.ProposalDtos.ProposalRequest req) {
+        return proposalService.create(user, id, req);
+    }
+
+    @PutMapping("/proposals/{id}")
+    @PreAuthorize("hasAuthority('PERM_CRM_USE')")
+    public br.com.erpadv.dto.ProposalDtos.ProposalResponse updateProposal(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                                                                         @Valid @RequestBody br.com.erpadv.dto.ProposalDtos.ProposalRequest req) {
+        return proposalService.update(user, id, req);
+    }
+
+    @DeleteMapping("/proposals/{id}")
+    @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('PERM_CRM_USE')")
+    public void deleteProposal(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
+        proposalService.delete(user, id);
+    }
+
+    @PostMapping("/proposals/{id}/send")
+    @PreAuthorize("hasAuthority('PERM_CRM_USE')")
+    public br.com.erpadv.dto.ProposalDtos.ProposalResponse sendProposal(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
+        return proposalService.send(user, id);
+    }
+
+    @PostMapping("/proposals/{id}/decision")
+    @PreAuthorize("hasAuthority('PERM_CRM_USE')")
+    public br.com.erpadv.dto.ProposalDtos.ProposalResponse decideProposal(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id,
+                                                                         @Valid @RequestBody br.com.erpadv.dto.ProposalDtos.DecisionRequest req) {
+        return proposalService.decide(user, id, req);
+    }
+
+    @GetMapping("/proposals/{id}/pdf")
+    @PreAuthorize("hasAuthority('PERM_CRM_USE')")
+    public org.springframework.http.ResponseEntity<byte[]> proposalPdf(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
+        return DashboardController.file(proposalService.pdf(user, id));
     }
 
     @GetMapping("/metrics")

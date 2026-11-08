@@ -96,6 +96,12 @@ class SecurityIntegrationTest {
     br.com.erpadv.services.ContractService contractService;
     @MockitoBean
     br.com.erpadv.services.LegalEditorService legalEditorService;
+    @MockitoBean
+    br.com.erpadv.services.FeeService feeService;
+    @MockitoBean
+    br.com.erpadv.services.ReportCenterService reportCenterService;
+    @MockitoBean
+    br.com.erpadv.services.FinanceSetupService financeSetupService;
 
     private void token(String token, String uid, String officeId, Role role, long iatSeconds) throws Exception {
         FirebaseToken decoded = mock(FirebaseToken.class);
@@ -575,5 +581,59 @@ class SecurityIntegrationTest {
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/deadlines/d1/receipt")
                 .file(new org.springframework.mock.web.MockMultipartFile("file", "c.pdf", "application/pdf", "%PDF-1.4".getBytes()))
                 .header("Authorization", "Bearer t-sec20")).andExpect(status().isForbidden());
+    }
+
+    // ------------------------------------------------------------------ Fase 3: gestão empresarial
+
+    @Test
+    void estagiarioSemFinanceiroNemRelatoriosMasVeAsPropriasComissoes() throws Exception {
+        token("t-est30", "est30", "office1", Role.ESTAGIARIO, now());
+        profile("est30", "office1", Role.ESTAGIARIO, UserStatus.ACTIVE, null);
+        String bearer = "Bearer t-est30";
+        mvc.perform(get("/api/reports").header("Authorization", bearer)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/fees/summary").param("from", "2026-01-01").param("to", "2026-12-31").header("Authorization", bearer))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/finance/bank-accounts").header("Authorization", bearer)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/finance/cost-centers").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Contencioso\",\"active\":true}")).andExpect(status().isForbidden());
+        when(feeService.commissions(any(), any(), any(), org.mockito.ArgumentMatchers.eq("est30"))).thenReturn(List.of());
+        mvc.perform(get("/api/fees/commissions/mine").param("from", "2026-01-01").param("to", "2026-12-31").header("Authorization", bearer))
+                .andExpect(status().isOk());
+        verify(feeService).commissions(any(), any(), any(), org.mockito.ArgumentMatchers.eq("est30"));
+    }
+
+    @Test
+    void comissoesDeOutrosERegrasExigemFinanceiro() throws Exception {
+        token("t-adv30", "adv30", "office1", Role.ADVOGADO, now());
+        profile("adv30", "office1", Role.ADVOGADO, UserStatus.ACTIVE, null);
+        mvc.perform(get("/api/fees/commissions").param("from", "2026-01-01").param("to", "2026-12-31").header("Authorization", "Bearer t-adv30"))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/fees/commission-rules").header("Authorization", "Bearer t-adv30").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"beneficiaryUid\":\"adv30\",\"percentBp\":5000,\"active\":true}")).andExpect(status().isForbidden());
+        verify(feeService, never()).saveRule(any(), any(), any());
+
+        token("t-cli30", "cli30", "office1", Role.CLIENTE, now());
+        profile("cli30", "office1", Role.CLIENTE, UserStatus.ACTIVE, null);
+        mvc.perform(get("/api/fees/commissions/mine").param("from", "2026-01-01").param("to", "2026-12-31").header("Authorization", "Bearer t-cli30"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void renovacaoDeContratoExigeEdicaoDeContratos() throws Exception {
+        token("t-ass30", "ass30", "office1", Role.ADVOGADO_ASSOCIADO, now());
+        profile("ass30", "office1", Role.ADVOGADO_ASSOCIADO, UserStatus.ACTIVE, null);
+        mvc.perform(post("/api/contracts/c1/renew").header("Authorization", "Bearer t-ass30").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"newEndDate\":\"2027-12-31\"}")).andExpect(status().isForbidden());
+        verify(contractService, never()).renew(any(), any(), any());
+    }
+
+    @Test
+    void financeiroGeraRelatoriosDoSeuModulo() throws Exception {
+        token("t-fin30", "fin30", "office1", Role.FINANCEIRO, now());
+        profile("fin30", "office1", Role.FINANCEIRO, UserStatus.ACTIVE, null);
+        when(reportCenterService.catalog(any())).thenReturn(List.of());
+        mvc.perform(get("/api/reports").header("Authorization", "Bearer t-fin30")).andExpect(status().isOk());
+        mvc.perform(get("/api/finance/transactions/t1/recibo").header("Authorization", "Bearer t-fin30"))
+                .andExpect(status().is(org.hamcrest.Matchers.not(403)));
     }
 }

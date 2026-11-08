@@ -14,6 +14,8 @@ public final class ContractEnums {
         HONORARIOS("Contrato de honorários advocatícios"),
         PARTIDO_MENSAL("Prestação de serviços — partido mensal"),
         CONSULTORIA("Consultoria jurídica"),
+        PRESTACAO_SERVICOS("Prestação de serviços jurídicos"),
+        ADMINISTRATIVO("Contrato administrativo (locação, fornecedores, parcerias)"),
         PROCURACAO("Procuração"),
         OUTRO("Outro");
 

@@ -20,6 +20,13 @@ import java.util.Set;
 
 public final class ContractDtos {
 
+    /** Renovação: novo término; no partido mensal, meses adicionais e (opcional) novo valor da mensalidade. */
+    public record RenewRequest(@jakarta.validation.constraints.NotNull java.time.LocalDate newEndDate,
+                               @jakarta.validation.constraints.Min(0) @jakarta.validation.constraints.Max(60) Integer monthsAdded,
+                               @jakarta.validation.constraints.Positive @jakarta.validation.constraints.Max(100_000_000_000L) Long monthlyCents,
+                               @jakarta.validation.constraints.Size(max = 500) String note) {
+    }
+
     private ContractDtos() {
     }
 
@@ -87,7 +94,8 @@ public final class ContractDtos {
             Instant closedAt,
             String cancelReason,
             Instant createdAt,
-            Instant updatedAt) {
+            Instant updatedAt,
+            List<Contract.Renewal> renewals) {
 
         public static ContractResponse of(Contract c, LocalDate today, boolean includeBody) {
             Long daysToEnd = c.getEndDate() == null ? null : java.time.temporal.ChronoUnit.DAYS.between(today, c.getEndDate());
@@ -99,7 +107,7 @@ public final class ContractDtos {
                     c.getFirstDueDate(), c.getMonthlyCents(), c.getMonths(), c.getStages(), c.getSuccessPercentBp(),
                     c.getSuccessBase(), c.isSuccessBilled(), c.getTemplateId(), includeBody ? c.getBody() : null,
                     c.getBodyGeneratedAt(), c.getSignedDocumentId(), c.getSignedAt(), c.getActivatedAt(), c.getClosedAt(),
-                    c.getCancelReason(), c.getCreatedAt(), c.getUpdatedAt());
+                    c.getCancelReason(), c.getCreatedAt(), c.getUpdatedAt(), c.getRenewals());
         }
     }
 

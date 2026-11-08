@@ -100,11 +100,22 @@ Documentação: [arquitetura e fluxo de autenticação](docs/ARQUITETURA.md) ·
   contratos, serviços) e despesas (aluguel, energia, internet, pessoal, sistemas, marketing, fornecedores…),
   parcelamentos e despesas recorrentes, baixa com valor efetivo e comprovante (Firebase Storage via
   backend), fluxo de caixa, projeção de 6 meses, DRE gerencial, inadimplência com aging e marcação
-  automática no CRM, exportação CSV e finanças pessoais dos sócios separadas das do escritório.
+  automática no CRM, exportação CSV e finanças pessoais dos sócios separadas das do escritório; centros de custo,
+  contas bancárias com saldo e extrato, recibo em PDF (no papel timbrado), cobranças com mensagem pronta, link do
+  WhatsApp e histórico.
+* **Honorários**: contratado, recebido, pendente e em atraso por cliente, processo, contrato e tipo (inclui
+  sucumbência e partido mensal), parcelas e histórico de pagamentos, percentual de êxito; comissões com regras por
+  integrante (geral, por cliente, por processo ou só processos sob sua responsabilidade), apuração por período,
+  lançamento no contas a pagar sem duplicidade e "Minhas comissões" para cada integrante.
+* **Central de relatórios**: 19 relatórios (clientes, processos por área/advogado/tribunal, ativos e encerrados,
+  prazos vencidos e cumpridos, audiências, contratos ativos e vencidos, honorários recebidos e pendentes,
+  despesas, fluxo de caixa, produtividade da equipe, desempenho comercial e histórico de alterações) em PDF e
+  Excel, com cabeçalho do escritório, período e data de geração, filtrados pelas permissões.
 * **Contratos e honorários**: fixos, parcelados, por etapas, de êxito e partido mensal; ativação gera as
   contas a receber; faturamento de etapas e do êxito; modelos com campos dinâmicos (valor por extenso,
   qualificação do cliente, dados do processo); minuta exportada em PDF e DOCX; contrato assinado anexado;
-  histórico de alterações; alertas de término (30/7/1/0 dias).
+  histórico de alterações; alertas de término (30/7/1/0 dias); tipos prestação de serviços e administrativo;
+  renovação com novas mensalidades e reajuste.
 * **Documentos**: repositório no Firebase Storage com categorias, organização por cliente/processo,
   versionamento, pré-visualização, histórico de acesso, sigilo e arquivamento.
 * **Equipe e cargos**: cargos personalizados do escritório (Advogado júnior, Estagiário, Secretário(a),
@@ -115,7 +126,9 @@ Documentação: [arquitetura e fluxo de autenticação](docs/ARQUITETURA.md) ·
   etiquetar, atribuir, definir vencimento), checklist, vínculo com cliente/processo, comentários com
   @menções, tempo parado na coluna, filtros, visão em lista, "Meus cartões", conversão do cartão em
   prazo processual e indicadores (vazão semanal, ciclo médio, gargalos, carga por pessoa).
-* **CRM comercial**: funil de captação (novo → negociação → ganho/perdido) com arrastar e soltar,
+* **CRM comercial**: funil com as etapas da especificação (novo contato → primeiro atendimento → qualificação →
+  reunião agendada → proposta enviada → aguardando decisão → contrato enviado → cliente convertido/atendimento
+  encerrado), propostas de honorários em PDF que avançam o funil, arrastar e soltar,
   pontuação automática (quente/morno/frio), próxima ação com alerta de atraso, histórico de interações,
   motivo de perda obrigatório, conversão em cliente e métricas (pipeline ponderado, conversão por
   origem e por responsável, entradas × ganhos por mês).
@@ -161,6 +174,6 @@ cd frontend && npm install && npm start                  # http://localhost:4200
 | Suíte | Comando | O que cobre |
 |---|---|---|
 | Backend unitário + segurança | `cd backend && mvn test` | saneamento do editor, campos escapados, modelos, exportação PDF (numeração) e DOCX (cabeçalho/rodapé/tabelas), recorrência da agenda, formatos OOXML/OLE/TXT, permissões da lixeira/pastas/editor/relatórios; relatórios PDF/Excel (injeção de fórmulas), agrupamentos do dashboard, pesquisa sem acentos, CPF/CNPJ/CNJ, criptografia, RBAC, cadeia de auditoria, serviço de clientes, contagem de prazos (feriados, recesso, suspensões), política de alertas, DRE, validação de arquivos, CSV, valor por extenso, minuta, exportação PDF/DOCX, filtro JWT (401/403, bloqueio, revogação, isolamento, validação) |
-| Backend ponta a ponta | `cd firebase && npm run test:backend-e2e` | Fase 2 (prazo com origem/publicação/comprovante/histórico/relatório; série recorrente com convidados, confirmação, status, ICS, audiências e relatório; tarefas; pastas, ciclo recusado, XLSX, etiquetas, duplicidade, favoritos, mover/copiar, compartilhar, lixeira, restauração e eliminação auditada; editor: modelos, campos, saneamento, versões, finalização, PDF/DOCX, envio à central, restauração, modelo do escritório); Fase 1 (cliente PJ completo, duplicidade, ficha, exclusão com vínculos, processo com sentença/recurso, abas, relatório, duplicar/excluir, dashboard por advogado e exportação, pesquisa global); painel master → escritório com administrador → cargo personalizado → integrante com senha → quadros (WIP, automação, menções, indicadores) → CRM (funil, conversão) → limite de usuários → suspensão; e o fluxo: cadastro → escritório → clientes → processos → isolamento → dashboard → auditoria → calendário forense → prazos (validação, alertas idempotentes) → agenda (lembretes) → financeiro (parcelas, inadimplência no CRM, baixa, comprovante no Storage, DRE, CSV, escopo pessoal) → documentos (versões, acessos, arquivamento) → contratos (minuta, PDF/DOCX, ativação, êxito, etapas, assinado, cancelamento) → convite/bloqueio, com Auth e Firestore reais no emulador |
+| Backend ponta a ponta | `cd firebase && npm run test:backend-e2e` | Fase 3 (centro de custo e filtro, conta com saldo/extrato, baixa por conta, recibo, cobrança com mensagem e WhatsApp, honorários por cliente, comissão com lançamento único, renovação de contrato, etapas do CRM e propostas, os 19 relatórios); Fase 2 (prazo com origem/publicação/comprovante/histórico/relatório; série recorrente com convidados, confirmação, status, ICS, audiências e relatório; tarefas; pastas, ciclo recusado, XLSX, etiquetas, duplicidade, favoritos, mover/copiar, compartilhar, lixeira, restauração e eliminação auditada; editor: modelos, campos, saneamento, versões, finalização, PDF/DOCX, envio à central, restauração, modelo do escritório); Fase 1 (cliente PJ completo, duplicidade, ficha, exclusão com vínculos, processo com sentença/recurso, abas, relatório, duplicar/excluir, dashboard por advogado e exportação, pesquisa global); painel master → escritório com administrador → cargo personalizado → integrante com senha → quadros (WIP, automação, menções, indicadores) → CRM (funil, conversão) → limite de usuários → suspensão; e o fluxo: cadastro → escritório → clientes → processos → isolamento → dashboard → auditoria → calendário forense → prazos (validação, alertas idempotentes) → agenda (lembretes) → financeiro (parcelas, inadimplência no CRM, baixa, comprovante no Storage, DRE, CSV, escopo pessoal) → documentos (versões, acessos, arquivamento) → contratos (minuta, PDF/DOCX, ativação, êxito, etapas, assinado, cancelamento) → convite/bloqueio, com Auth e Firestore reais no emulador |
 | Security Rules | `cd firebase && npm run test:rules` | Perfis, isolamento, auditoria imutável, notificações, Storage |
 | Frontend | `cd frontend && npm test -- --watch=false --browsers=ChromeHeadless` | Árvore de pastas, busca no PDF, saneamento do editor, validadores, pipes, guards, interceptor, formulário de cliente, utilitários da agenda, de prazos e do financeiro |

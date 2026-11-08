@@ -17,6 +17,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog';
 import { AREA_LABELS } from '../../shared/labels';
 import { BrDatePipe, CentsPipe, RelativeTimePipe } from '../../shared/pipes/format.pipes';
 import { centsToInput, cpfCnpjValidator, formatCpfCnpj, formatPhone, parseMoneyToCents } from '../../shared/validators/br-validators';
+import { LeadProposalsComponent } from './proposals';
 import { ACTIVITY_LABELS, CrmService, Lead, LeadActivity, LeadActivityType, LeadSource, LeadStage, SOURCE_LABELS, STAGES } from './crm.service';
 
 // ======================================================================= cadastro / edição
@@ -254,7 +255,7 @@ export class LeadConvertDialogComponent {
 @Component({
   selector: 'app-lead-detail-dialog',
   imports: [ReactiveFormsModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule, MatIconModule,
-    MatTooltipModule, CentsPipe, BrDatePipe, RelativeTimePipe],
+    MatTooltipModule, CentsPipe, BrDatePipe, RelativeTimePipe, LeadProposalsComponent],
   template: `
     @if (lead(); as l) {
       <h2 mat-dialog-title class="dialog-title">
@@ -280,7 +281,7 @@ export class LeadConvertDialogComponent {
               <dt>Próxima ação</dt>
               <dd [class.late]="l.nextActionOverdue">{{ l.nextAction || '—' }} @if (l.nextActionDate) { · {{ l.nextActionDate | brDate }} }</dd>
               <dt>Na etapa há</dt><dd>{{ l.daysInStage }} dia(s)</dd>
-              @if (l.lostReason) { <dt>Motivo da perda</dt><dd class="late">{{ l.lostReason }}</dd> }
+              @if (l.lostReason) { <dt>Motivo do encerramento</dt><dd class="late">{{ l.lostReason }}</dd> }
               @if (l.tags.length) { <dt>Etiquetas</dt><dd>@for (t of l.tags; track t) { <span class="badge">{{ t }}</span> }</dd> }
             </dl>
             @if (l.notes) { <p class="notes">{{ l.notes }}</p> }
@@ -308,6 +309,8 @@ export class LeadConvertDialogComponent {
               </mat-form-field>
               <div class="row"><span class="spacer"></span><button mat-flat-button type="submit" [disabled]="form.invalid || sending()">Registrar</button></div>
             </form>
+            <app-lead-proposals [leadId]="l.id" (changed)="load()" />
+            <div class="form-section-title tl">Histórico</div>
             <div class="timeline">
               @for (a of activities(); track a.id) {
                 <div class="ev"><mat-icon>{{ activityLabels[a.type].icon }}</mat-icon>
@@ -350,6 +353,7 @@ export class LeadConvertDialogComponent {
     .late { color: var(--app-danger); }
     .notes { white-space: pre-wrap; background: var(--app-surface-2); border: 1px solid var(--app-border); border-radius: 10px; padding: 10px; font-size: 13px; }
     .timeline { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; max-height: 34vh; overflow: auto; }
+    .tl { margin-top: 14px; }
     .ev { display: flex; gap: 10px; font-size: 13px; }
     .ev mat-icon { color: var(--app-gold); font-size: 20px; width: 20px; height: 20px; }
     .small { font-size: 12px; }

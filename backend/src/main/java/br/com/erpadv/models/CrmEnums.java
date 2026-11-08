@@ -7,13 +7,15 @@ public final class CrmEnums {
     }
 
     public enum LeadStage {
-        NOVO("Novo", 10, true),
-        CONTATO("Primeiro contato", 20, true),
-        QUALIFICADO("Qualificado", 40, true),
+        NOVO("Novo contato", 10, true),
+        CONTATO("Primeiro atendimento", 20, true),
+        QUALIFICADO("Qualificação", 30, true),
+        REUNIAO_AGENDADA("Reunião agendada", 45, true),
         PROPOSTA("Proposta enviada", 60, true),
-        NEGOCIACAO("Negociação", 80, true),
-        GANHO("Ganho", 100, false),
-        PERDIDO("Perdido", 0, false);
+        NEGOCIACAO("Aguardando decisão", 70, true),
+        CONTRATO_ENVIADO("Contrato enviado", 85, true),
+        GANHO("Cliente convertido", 100, false),
+        PERDIDO("Atendimento encerrado", 0, false);
 
         private final String label;
         private final int probability;

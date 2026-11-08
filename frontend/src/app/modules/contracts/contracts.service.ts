@@ -5,13 +5,15 @@ import { ApiService } from '../../core/api/api.service';
 import { AuditLog, CursorPage } from '../../core/models/models';
 
 export type ContractStatus = 'RASCUNHO' | 'ATIVO' | 'ENCERRADO' | 'CANCELADO';
-export type ContractType = 'HONORARIOS' | 'PARTIDO_MENSAL' | 'CONSULTORIA' | 'PROCURACAO' | 'OUTRO';
+export type ContractType = 'HONORARIOS' | 'PARTIDO_MENSAL' | 'CONSULTORIA' | 'PRESTACAO_SERVICOS' | 'ADMINISTRATIVO' | 'PROCURACAO' | 'OUTRO';
 export type FeeModel = 'FIXO' | 'PARCELADO' | 'ETAPAS' | 'EXITO' | 'MENSAL';
 
 export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
   HONORARIOS: 'Contrato de honorários advocatícios',
   PARTIDO_MENSAL: 'Prestação de serviços — partido mensal',
   CONSULTORIA: 'Consultoria jurídica',
+  PRESTACAO_SERVICOS: 'Prestação de serviços jurídicos',
+  ADMINISTRATIVO: 'Contrato administrativo (locação, fornecedores, parcerias)',
   PROCURACAO: 'Procuração',
   OUTRO: 'Outro',
 };
@@ -80,6 +82,17 @@ export interface Contract {
   activatedAt: string | null;
   cancelReason: string | null;
   createdAt: string;
+  renewals: ContractRenewal[] | null;
+}
+
+export interface ContractRenewal {
+  renewedOn: string;
+  previousEndDate: string | null;
+  newEndDate: string;
+  monthsAdded: number | null;
+  monthlyCents: number | null;
+  note: string | null;
+  byName: string;
 }
 
 export interface ContractRequest {
@@ -142,6 +155,10 @@ export class ContractsService {
 
   action(id: string, action: 'activate' | 'close'): Observable<Contract> {
     return this.api.post(`/contracts/${encodeURIComponent(id)}/${action}`);
+  }
+
+  renew(id: string, body: { newEndDate: string; monthsAdded: number | null; monthlyCents: number | null; note: string | null }): Observable<Contract> {
+    return this.api.post(`/contracts/${encodeURIComponent(id)}/renew`, body);
   }
 
   cancel(id: string, reason: string): Observable<Contract> {

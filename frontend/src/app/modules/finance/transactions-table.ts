@@ -89,7 +89,7 @@ import { PayDialogComponent, TransactionDialogComponent } from './transaction-di
                     <div class="strong">{{ t.description }}
                       @if (t.installmentCount) { <span class="badge">{{ t.recurrent ? 'mês' : 'parc.' }} {{ t.installmentNumber }}/{{ t.installmentCount }}</span> }
                     </div>
-                    <div class="small">{{ t.categoryLabel }}{{ t.documentNumber ? ' · doc. ' + t.documentNumber : '' }}</div>
+                    <div class="small">{{ t.categoryLabel }}{{ t.costCenterName ? ' · ' + t.costCenterName : '' }}{{ t.documentNumber ? ' · doc. ' + t.documentNumber : '' }}{{ t.bankAccountName ? ' · ' + t.bankAccountName : '' }}</div>
                   </td>
                   <td>
                     @if (t.clientId) { <a [routerLink]="['/clientes', t.clientId]">{{ t.clientName }}</a> } @else { {{ t.counterparty || '—' }} }
@@ -115,6 +115,9 @@ import { PayDialogComponent, TransactionDialogComponent } from './transaction-di
                       }
                       @if (t.hasReceipt) {
                         <button mat-menu-item (click)="downloadReceipt(t)"><mat-icon>file_download</mat-icon>Baixar comprovante</button>
+                      }
+                      @if (t.direction === 'RECEITA' && t.status === 'PAGO' && t.scope === 'ESCRITORIO') {
+                        <button mat-menu-item (click)="recibo(t)"><mat-icon>receipt</mat-icon>{{ t.receiptNumber ? 'Recibo ' + t.receiptNumber : 'Emitir recibo' }}</button>
                       }
                       @if (canWrite() && t.status === 'ABERTO') {
                         <button mat-menu-item (click)="cancel(t)"><mat-icon>block</mat-icon>Cancelar</button>
@@ -298,6 +301,11 @@ export class TransactionsTableComponent {
       this.toast.success('Comprovante anexado.');
       this.load(false);
     });
+  }
+
+  /** Recibo de quitação em PDF (no papel timbrado padrão, quando houver). */
+  recibo(t: Transaction): void {
+    this.service.recibo(t.id).subscribe((r) => { saveBlob(r, 'recibo.pdf'); this.load(false); });
   }
 
   downloadReceipt(t: Transaction): void {
