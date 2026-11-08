@@ -67,6 +67,7 @@ import { DocumentsTableComponent } from '../documents/documents-table';
                 }
                 @if (auth.has('BOARDS_USE')) {
                   <a mat-menu-item routerLink="/tarefas" [queryParams]="{ clientId: c.id, label: c.name }"><mat-icon>add_task</mat-icon>Tarefas do cliente</a>
+                  @if (auth.has('MESSAGES_USE')) { <a mat-menu-item routerLink="/comunicacao" [queryParams]="{ cliente: c.id }"><mat-icon>forum</mat-icon>Comunicação com o cliente</a> }
                 }
                 @if (auth.has('DOCUMENTS_READ')) {
                   <a mat-menu-item routerLink="/editor-juridico" [queryParams]="{ clientId: c.id, clientName: c.name }"><mat-icon>edit_document</mat-icon>Documentos no Editor Jurídico</a>

@@ -29,6 +29,8 @@ import { DeadlinesService } from './deadlines.service';
 export interface DeadlineFormData {
   deadline?: Deadline | null;
   legalCase?: { id: string; cnjNumber: string | null; clientName: string; court: string | null } | null;
+  /** Pré-preenchimento (ex.: prazo criado a partir de uma publicação do DJEN). */
+  prefill?: { description?: string; origin?: DeadlineOrigin; availabilityDate?: string; notes?: string; responsibleUid?: string } | null;
 }
 
 interface CasePick {
@@ -233,17 +235,17 @@ export class DeadlineFormDialogComponent {
   readonly caseSearch = new FormControl<CasePick | string>(this.initialCase ?? '');
 
   readonly form = inject(FormBuilder).nonNullable.group({
-    description: [this.d?.description ?? '', [Validators.required, Validators.maxLength(300)]],
+    description: [this.d?.description ?? this.data?.prefill?.description ?? '', [Validators.required, Validators.maxLength(300)]],
     type: [this.d?.type ?? ('MANIFESTACAO' as DeadlineType), Validators.required],
     startDate: [this.d?.startDate ?? todayIso(), Validators.required],
     countingMode: [this.d?.countingMode ?? ('UTEIS' as CountingMode), Validators.required],
     days: [this.d?.days ?? 15, [Validators.min(1), Validators.max(3650)]],
     dueDate: [this.d?.dueDate ?? ''],
     court: [this.d?.court ?? this.initialCase?.court ?? ''],
-    responsibleUid: [this.d?.responsibleUid ?? this.auth.me()?.uid ?? '', Validators.required],
+    responsibleUid: [this.d?.responsibleUid ?? this.data?.prefill?.responsibleUid ?? this.auth.me()?.uid ?? '', Validators.required],
     priority: [this.d?.priority ?? ('MEDIA' as DeadlinePriority), Validators.required],
-    notes: [this.d?.notes ?? ''],
-    origin: [(this.d?.origin ?? null) as DeadlineOrigin | null],
+    notes: [this.d?.notes ?? this.data?.prefill?.notes ?? ''],
+    origin: [(this.d?.origin ?? this.data?.prefill?.origin ?? null) as DeadlineOrigin | null],
     availabilityDate: [this.d?.availabilityDate ?? ''],
     publicationDate: [this.d?.publicationDate ?? ''],
     awarenessDate: [this.d?.awarenessDate ?? ''],
@@ -271,6 +273,8 @@ export class DeadlineFormDialogComponent {
       .pipe(debounceTime(350), takeUntilDestroyed())
       .subscribe(() => this.recalculate());
     this.recalculate();
+    const avail = this.data?.prefill?.availabilityDate;
+    if (avail && !this.d) setTimeout(() => this.form.controls.availabilityDate.setValue(avail));
   }
 
   /** Sugere publicação e início da contagem pelo calendário forense (sempre revisável pelo advogado). */

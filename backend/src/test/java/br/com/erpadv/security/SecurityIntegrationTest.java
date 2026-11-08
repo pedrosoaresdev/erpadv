@@ -33,6 +33,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -102,6 +103,10 @@ class SecurityIntegrationTest {
     br.com.erpadv.services.ReportCenterService reportCenterService;
     @MockitoBean
     br.com.erpadv.services.FinanceSetupService financeSetupService;
+    @MockitoBean
+    br.com.erpadv.services.integrations.IntegrationService integrationService;
+    @MockitoBean
+    br.com.erpadv.services.CommunicationService communicationService;
 
     private void token(String token, String uid, String officeId, Role role, long iatSeconds) throws Exception {
         FirebaseToken decoded = mock(FirebaseToken.class);
@@ -635,5 +640,44 @@ class SecurityIntegrationTest {
         mvc.perform(get("/api/reports").header("Authorization", "Bearer t-fin30")).andExpect(status().isOk());
         mvc.perform(get("/api/finance/transactions/t1/recibo").header("Authorization", "Bearer t-fin30"))
                 .andExpect(status().is(org.hamcrest.Matchers.not(403)));
+    }
+
+    @Test
+    void integracoesExigemPermissaoNoServidor() throws Exception {
+        token("t-adv40", "adv40", "office1", Role.ADVOGADO, now());
+        profile("adv40", "office1", Role.ADVOGADO, UserStatus.ACTIVE, null);
+        // configurar conectores (chaves e segredos) é exclusivo de quem tem SETTINGS_MANAGE
+        mvc.perform(put("/api/integrations/WHATSAPP").header("Authorization", "Bearer t-adv40").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"enabled\":true,\"config\":{\"phoneNumberId\":\"1\"},\"secrets\":{\"accessToken\":\"x\"}}"))
+                .andExpect(status().isForbidden());
+        verify(integrationService, never()).save(any(), any(), any());
+
+        token("t-sec40", "sec40", "office1", Role.SECRETARIA, now());
+        profile("sec40", "office1", Role.SECRETARIA, UserStatus.ACTIVE, null);
+        mvc.perform(post("/api/integrations/datajud/sync").header("Authorization", "Bearer t-sec40")).andExpect(status().isForbidden());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/integrations/import/cases")
+                .file(new org.springframework.mock.web.MockMultipartFile("file", "p.csv", "text/csv", "numero_cnj;x".getBytes()))
+                .header("Authorization", "Bearer t-sec40")).andExpect(status().isForbidden());
+
+        token("t-cli40", "cli40", "office1", Role.CLIENTE, now());
+        profile("cli40", "office1", Role.CLIENTE, UserStatus.ACTIVE, null);
+        mvc.perform(get("/api/communications").header("Authorization", "Bearer t-cli40")).andExpect(status().isForbidden());
+        mvc.perform(post("/api/communications/send").header("Authorization", "Bearer t-cli40").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"channel\":\"EMAIL\",\"to\":\"a@b.com\",\"subject\":\"x\",\"body\":\"y\"}")).andExpect(status().isForbidden());
+        verify(communicationService, never()).send(any(), any());
+
+        mvc.perform(get("/api/integrations")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void webhooksSaoPublicosMasRecusamAssinaturaInvalida() throws Exception {
+        // sem segredo configurado (ou com assinatura errada) o webhook do WhatsApp recusa e nada é gravado
+        mvc.perform(post("/api/hooks/whatsapp/office1").contentType(MediaType.APPLICATION_JSON).content("{\"entry\":[]}")
+                .header("X-Hub-Signature-256", "sha256=00")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/hooks/whatsapp/office1").param("hub.mode", "subscribe").param("hub.verify_token", "x")
+                .param("hub.challenge", "123")).andExpect(status().isForbidden());
+        mvc.perform(post("/api/hooks/zapsign/office1").param("secret", "x").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnauthorized());
+        verify(communicationService, never()).receiveWhatsApp(any(), any());
     }
 }

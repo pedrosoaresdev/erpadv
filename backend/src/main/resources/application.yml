@@ -1,4 +1,16 @@
 spring:
+  mail:
+    # SMTP padrão do ambiente (em desenvolvimento, o Mailpit do Docker Compose). Cada escritório pode usar o próprio
+    # SMTP pela Central de Integrações.
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${SMTP_AUTH:true}
+      mail.smtp.starttls.enable: ${SMTP_STARTTLS:true}
+      mail.smtp.connectiontimeout: 10000
+      mail.smtp.timeout: 20000
   application:
     name: erpadv-backend
   threads:
@@ -73,6 +85,27 @@ app:
     enabled: ${JOBS_ENABLED:true}
     deadline-alerts-cron: ${DEADLINE_ALERTS_CRON:0 5 * * * *}
     appointment-reminders-ms: ${APPOINTMENT_REMINDERS_MS:300000}
+  mail:
+    from: ${MAIL_FROM:}
+  integrations:
+    # URL pública do sistema (retorno do OAuth do Google).
+    public-app-url: ${PUBLIC_APP_URL:https://localhost:8443}
+    datajud:
+      # Chave pública divulgada pelo CNJ em https://datajud-wiki.cnj.jus.br/api-publica/acesso (o escritório pode
+      # informar outra na Central de Integrações).
+      api-key: ${DATAJUD_API_KEY:}
+      base-url: ${DATAJUD_BASE_URL:https://api-publica.datajud.cnj.jus.br}
+    djen:
+      base-url: ${DJEN_BASE_URL:https://comunicaapi.pje.jus.br}
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
+      redirect-uri: ${GOOGLE_REDIRECT_URI:}
+    whatsapp:
+      graph-url: ${WHATSAPP_GRAPH_URL:https://graph.facebook.com/v20.0}
+    zapsign:
+      url: ${ZAPSIGN_URL:https://api.zapsign.com.br}
+      sandbox-url: ${ZAPSIGN_SANDBOX_URL:https://sandbox.api.zapsign.com.br}
   documents:
     # Limite por arquivo enviado à central documental (MB).
     max-size-mb: ${DOCUMENTS_MAX_MB:25}

@@ -167,6 +167,10 @@ export type MovementType =
 export type CasePhase = 'POSTULATORIA' | 'INSTRUTORIA' | 'DECISORIA' | 'RECURSAL' | 'CUMPRIMENTO' | 'EXECUCAO' | 'ENCERRAMENTO';
 
 export interface LegalCase {
+  integrationSyncedAt?: string | null;
+  integrationStatus?: 'OK' | 'NAO_ENCONTRADO' | 'ERRO' | null;
+  integrationError?: string | null;
+  integrationSource?: string | null;
   id: string;
   cnjNumber: string | null;
   clientId: string;

@@ -48,6 +48,11 @@ public class LegalCase extends BaseEntity {
     private boolean confidential;
     /** Calculado: criminal ou sigiloso — exige CRIMINAL_READ para ser listado/consultado. */
     private boolean restricted;
+    /** Última sincronização com a consulta processual oficial (DataJud/CNJ). */
+    private java.time.Instant integrationSyncedAt;
+    private String integrationStatus;
+    private String integrationError;
+    private String integrationSource;
     private boolean archived;
     private Instant archivedAt;
     /** Data da última movimentação registrada (para "aguardando movimentação"). */

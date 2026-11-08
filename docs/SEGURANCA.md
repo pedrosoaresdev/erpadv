@@ -38,6 +38,11 @@
 | Honorários e comissões | Visão geral, regras e lançamentos exigem `FINANCE_READ`/`FINANCE_WRITE`; "Minhas comissões" mostra somente as do próprio usuário (filtro no servidor pelo uid do token). Cada recebimento comissionado fica registrado no pagamento para impedir comissão em dobro. |
 | Central de relatórios | Exige `REPORTS_VIEW` e a permissão do módulo de cada relatório; processos, prazos e compromissos sigilosos ficam de fora sem `CRIMINAL_READ`; CPF/CNPJ sempre mascarados; cada geração vai para a auditoria. Recibos só para receitas pagas do escritório; CPF/CNPJ completo no recibo apenas para `CLIENTS_SENSITIVE_READ`. |
 | Compartilhamento interno | Apenas notifica integrantes da equipe com o link; o acesso continua sujeito às permissões e ao sigilo de cada um. |
+| Integrações (credenciais) | Chaves e tokens (DataJud, SMTP, WhatsApp, ZapSign, Google) ficam só no backend: cifrados com AES-256-GCM no Firestore ou em variáveis de ambiente — nunca no Angular, nem nas imagens Docker; a interface só recebe *quais* segredos estão configurados. Configurar conectores exige `SETTINGS_MANAGE`; sincronizar exige `CASES_WRITE`/`DEADLINES_WRITE`; enviar mensagens, `MESSAGES_USE`. |
+| Tribunais | Apenas interfaces oficiais: API pública do DataJud (CNJ) e API Comunica PJe (DJEN). Sem captura de tela, sem robôs de login e sem guardar senha ou certificado judicial; onde não há API aberta o sistema oferece importação de planilha/documentos e o link do portal oficial. Limite de 300 processos por execução com pausa entre consultas. |
+| Webhooks | `/api/hooks/**` é público, mas cada provedor é autenticado: WhatsApp pela assinatura HMAC-SHA256 (`X-Hub-Signature-256`) com o App Secret e token de verificação; ZapSign por segredo próprio na URL, comparado em tempo constante; retorno do Google por `state` assinado (HMAC) com validade de 10 minutos. Mensagens repetidas são ignoradas pelo id do provedor. |
+| Google Agenda | OAuth 2.0 por usuário com escopo mínimo (`calendar.events`); tokens cifrados; compromissos sigilosos vão sem descrição; desconectar apaga os tokens. |
+| Assinatura eletrônica | Só PDFs da central; a via assinada é baixada pelo backend apenas de URL HTTPS do provedor e guardada como nova versão (o original permanece no histórico). |
 
 ## Pendências (próximas etapas)
 

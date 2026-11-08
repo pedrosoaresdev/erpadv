@@ -20,6 +20,7 @@ import {
   ACCOUNT_KIND_LABELS, BankAccount, BankAccountKind, CHANNEL_LABELS, CollectionChannel, CollectionDraft, CollectionOutcome, CollectionRecord,
   CostCenter, OUTCOME_LABELS, Statement,
 } from './finance.models';
+import { ApiService } from '../../core/api/api.service';
 import { FinanceService } from './finance.service';
 
 const localToday = () => {
@@ -38,7 +39,7 @@ const localToday = () => {
           <h3><mat-icon>account_balance</mat-icon>Contas bancárias e caixa</h3>
           @if (canWrite) { <button mat-stroked-button (click)="editAccount(null)"><mat-icon>add</mat-icon>Nova conta</button> }
         </div>
-        <p class="muted small">O saldo é calculado pelo saldo inicial e pelas baixas registradas em cada conta. A conciliação automática com o banco depende de integração autorizada (Fase 4).</p>
+        <p class="muted small">O saldo é calculado pelo saldo inicial e pelas baixas registradas em cada conta. A conciliação automática com o banco depende de integração com a instituição financeira (ainda não disponível).</p>
         @if (loading()) { <mat-progress-bar mode="indeterminate" /> }
         @if (!loading() && !accounts().length) {
           <app-empty-state icon="account_balance" title="Nenhuma conta cadastrada" text="Cadastre as contas do escritório para acompanhar saldos e extratos." />
@@ -360,7 +361,10 @@ export interface CollectionDialogData {
         <div class="row">
           <button mat-stroked-button (click)="copy()"><mat-icon>content_copy</mat-icon>Copiar mensagem</button>
           @if (d.whatsappUrl) { <button mat-stroked-button (click)="whatsapp(d)"><mat-icon>chat</mat-icon>Abrir no WhatsApp</button> }
-          @if (d.email) { <a mat-stroked-button [href]="mailto(d)"><mat-icon>mail</mat-icon>Abrir e-mail</a> }
+          @if (d.email) {
+            <button mat-stroked-button (click)="sendEmail(d)" [disabled]="saving()"><mat-icon>forward_to_inbox</mat-icon>Enviar por e-mail</button>
+            <a mat-button [href]="mailto(d)"><mat-icon>mail</mat-icon>Abrir no meu e-mail</a>
+          }
         </div>
         <h4>Registrar o contato</h4>
         <div class="grid">
@@ -397,6 +401,7 @@ export interface CollectionDialogData {
   `,
 })
 export class CollectionDialogComponent {
+  private readonly api = inject(ApiService);
   readonly data = inject<CollectionDialogData>(MAT_DIALOG_DATA);
   private readonly ref = inject(MatDialogRef<CollectionDialogComponent>);
   private readonly service = inject(FinanceService);
@@ -420,6 +425,16 @@ export class CollectionDialogComponent {
     this.service.collections(this.data.clientId).subscribe((h) => this.history.set(h));
     this.service.list({ scope: 'ESCRITORIO', direction: 'RECEITA', view: 'ATRASADOS', clientId: this.data.clientId }, null, 100)
       .subscribe((p) => this.ids.set(p.items.map((t) => t.id)));
+  }
+
+  /** Envia pelo SMTP configurado (fica no histórico de comunicação do cliente) e registra a cobrança. */
+  sendEmail(d: CollectionDraft): void {
+    this.saving.set(true);
+    this.api.post('/communications/send', { channel: 'EMAIL', clientId: d.clientId, to: d.email, subject: 'Pagamentos em aberto',
+      body: this.message, documentIds: [] }).subscribe({
+      next: () => { this.saving.set(false); this.channel = 'EMAIL'; this.toast.success('E-mail de cobrança enviado.'); },
+      error: () => this.saving.set(false),
+    });
   }
 
   copy(): void {

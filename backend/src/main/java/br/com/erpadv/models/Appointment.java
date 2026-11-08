@@ -23,6 +23,8 @@ public class Appointment extends BaseEntity {
     private String meetingUrl;
     /** Reuniões: plataforma escolhida, ata e quem a registrou. */
     private MeetingPlatform meetingPlatform;
+    /** Evento correspondente na agenda Google de cada responsável conectado (uid → id do evento). */
+    private java.util.Map<String, String> googleEventIds = new java.util.HashMap<>();
     private String minutes;
     private java.time.Instant minutesUpdatedAt;
     private String minutesByName;

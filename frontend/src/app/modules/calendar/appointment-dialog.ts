@@ -22,6 +22,7 @@ import { APPOINTMENT_LABELS, APPOINTMENT_STATUS_LABELS, REMINDER_OPTIONS, RSVP_L
 import { CasesService } from '../cases/cases.service';
 import { DeadlinesService } from '../deadlines/deadlines.service';
 import { CalendarService } from './calendar.service';
+import { ApiService } from '../../core/api/api.service';
 import { addDays, fromLocal, toLocalDateInput, toLocalTimeInput } from './calendar-utils';
 
 export interface AppointmentDialogData {
@@ -154,7 +155,7 @@ export interface AppointmentDialogData {
             <button mat-icon-button type="button" (click)="removeGuest(i)" aria-label="Remover convidado"><mat-icon>close</mat-icon></button>
           </div>
         }
-        @if (guests().length) { <p class="muted small c12">Os convidados recebem o arquivo .ics pelo botão "Exportar"; o envio automático por e-mail chega com a integração de e-mail (Fase 4).</p> }
+        @if (guests().length) { <p class="muted small c12">Depois de salvar, use "Mais → Enviar convite por e-mail" para mandar o convite (.ics) aos convidados.</p> }
       </form>
 
       @if (a) {
@@ -192,6 +193,7 @@ export interface AppointmentDialogData {
             <button mat-menu-item (click)="changeStatus('AGENDADO')"><mat-icon>event</mat-icon>Voltar para agendado</button>
           }
           <button mat-menu-item (click)="exportIcs()"><mat-icon>event_available</mat-icon>Exportar .ics (Google Agenda/Outlook)</button>
+          @if (a.guests?.length) { <button mat-menu-item (click)="emailInvites()"><mat-icon>forward_to_inbox</mat-icon>Enviar convite por e-mail aos convidados</button> }
           <button mat-menu-item (click)="showHistory()"><mat-icon>history</mat-icon>Histórico de alterações</button>
         </mat-menu>
       }
@@ -317,6 +319,12 @@ export class AppointmentDialogComponent {
     this.service.ics(this.a.id).subscribe((r) => saveBlob(r, 'compromisso.ics'));
   }
 
+  emailInvites(): void {
+    if (!this.a) return;
+    this.api.post<{ sent: number }>(`/communications/appointments/${encodeURIComponent(this.a.id)}/invite`)
+      .subscribe((r) => this.toast.success(`${r.sent} convite(s) enviado(s) por e-mail.`));
+  }
+
   showHistory(): void {
     const a = this.a;
     if (!a) return;
@@ -355,6 +363,7 @@ export class AppointmentDialogComponent {
   }
 
   readonly platforms = MEETING_PLATFORMS;
+  private readonly api = inject(ApiService);
   private readonly platformKey = signal<MeetingPlatform | ''>('');
   readonly platformLabel = computed(() => platformInfo(this.platformKey() || null)?.label ?? 'link');
   readonly createInfo = computed(() => {

@@ -90,6 +90,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // Webhooks e retorno OAuth: autenticados por assinatura/segredo/estado assinado, não por token de usuário.
+                        .requestMatchers("/api/hooks/**").permitAll()
                         .requestMatchers("/api/auth/**", "/api/onboarding/**").authenticated()
                         .requestMatchers("/api/platform/**").hasAuthority(Permission.PLATFORM_ADMIN.authority())
                         .requestMatchers("/api/portal/**").hasAuthority(Permission.PORTAL_ACCESS.authority())

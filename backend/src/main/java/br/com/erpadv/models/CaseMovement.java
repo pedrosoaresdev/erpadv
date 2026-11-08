@@ -16,6 +16,8 @@ public class CaseMovement extends BaseEntity {
     private String description;
     /** MANUAL ou INTEGRACAO (consulta processual automatizada — etapa futura). */
     private String source;
+    /** Chave da movimentação no sistema de origem (evita importar duas vezes). */
+    private String externalId;
     /** Marcada como importante (destaque na linha do tempo e nos alertas). */
     private boolean important;
     private String authorUid;

@@ -46,6 +46,9 @@ public class CalendarService {
     private final ClientRepository clients;
     private final UserRepository users;
     private final AuditService audit;
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    private br.com.erpadv.services.integrations.GoogleCalendarService google;
     private final NotificationService notifications;
 
     public CalendarService(AppointmentRepository appointments, DeadlineRepository deadlines, CaseService cases,
@@ -157,7 +160,8 @@ public class CalendarService {
                 Map.of("start", first.getStart().toString(), "recurrence", req.recurrence() == null ? "" : req.recurrence()));
         notifyResponsibles(user, first, first.getResponsibleUids(),
                 total > 1 ? "Nova série de " + total + " compromissos na sua agenda" : "Novo compromisso na sua agenda");
-        return AppointmentResponse.of(first);
+        syncGoogle(officeId, first, seriesId);
+        return AppointmentResponse.of(appointments.findById(officeId, first.getId()).orElse(first));
     }
 
     static Instant shift(Instant base, String recurrence, int n) {
@@ -189,6 +193,7 @@ public class CalendarService {
                 o.setUpdatedAt(Instant.now());
                 o.setUpdatedBy(user.uid());
                 appointments.save(user.officeId(), o);
+                pushGoogle(user.officeId(), o);
             }
         }
         return updated;
@@ -202,6 +207,7 @@ public class CalendarService {
                     .whereEqualTo("seriesId", a.getSeriesId()), 60)) {
                 if (!o.getStart().isBefore(a.getStart())) {
                     appointments.delete(user.officeId(), o.getId());
+                    removeGoogle(user.officeId(), o);
                     removed++;
                 }
             }
@@ -211,6 +217,51 @@ public class CalendarService {
             return;
         }
         delete(user, id);
+    }
+
+    // ------------------------------------------------------------------ Google Agenda
+
+    /** Envia a série para o Google; a sala do Meet criada na primeira ocorrência vale para a série inteira. */
+    private void syncGoogle(String officeId, Appointment first, String seriesId) {
+        if (google == null) {
+            return;
+        }
+        pushGoogle(officeId, first);
+        String meet = appointments.findById(officeId, first.getId()).map(Appointment::getMeetingUrl).orElse(null);
+        if (seriesId != null) {
+            for (Appointment o : appointments.list(appointments.collection(officeId).whereEqualTo("seriesId", seriesId), 60)) {
+                if (o.getId().equals(first.getId())) {
+                    continue;
+                }
+                if (meet != null && o.getMeetingUrl() == null) {
+                    o.setMeetingUrl(meet);
+                    appointments.save(officeId, o);
+                }
+                pushGoogle(officeId, o);
+            }
+        }
+    }
+
+    private void pushGoogle(String officeId, Appointment a) {
+        if (google == null) {
+            return;
+        }
+        try {
+            google.push(officeId, a);
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(CalendarService.class).warn("Google Agenda: {}", e.getMessage());
+        }
+    }
+
+    private void removeGoogle(String officeId, Appointment a) {
+        if (google == null) {
+            return;
+        }
+        try {
+            google.remove(officeId, a);
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(CalendarService.class).warn("Google Agenda: {}", e.getMessage());
+        }
     }
 
     /** Confirmação de presença do integrante convidado. */
@@ -387,6 +438,7 @@ public class CalendarService {
         a.setUpdatedAt(Instant.now());
         a.setUpdatedBy(user.uid());
         appointments.save(user.officeId(), a);
+        pushGoogle(user.officeId(), a);
         audit.record(user, "APPOINTMENT_UPDATED", "appointment", id, a.getType().label() + ": " + a.getTitle());
         List<String> added = a.getResponsibleUids().stream().filter(uid -> !previous.contains(uid)).toList();
         notifyResponsibles(user, a, added, "Você foi incluído em um compromisso");
@@ -400,6 +452,7 @@ public class CalendarService {
     public void delete(AuthenticatedUser user, String id) {
         Appointment a = load(user, id);
         appointments.delete(user.officeId(), id);
+        removeGoogle(user.officeId(), a);
         audit.record(user, "APPOINTMENT_DELETED", "appointment", id, "Excluído: " + a.getType().label() + " — "
                 + a.getTitle(), Map.of("start", a.getStart().toString()));
         notifyResponsibles(user, a, a.getResponsibleUids(), "Compromisso cancelado");

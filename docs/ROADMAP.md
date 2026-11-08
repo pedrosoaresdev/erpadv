@@ -35,7 +35,7 @@ os dados já cadastrados.
 | 1 — Fundação | Menu final (seção 23) com fases indicadas, navegação mobile (barra inferior, formulários em tela cheia, tabelas em cartões), dashboard executivo ampliado (prazos 3/7/15 dias, suspensos, aguardando movimentação, agenda, tribunal, origem, desempenho da equipe, comparação com período anterior, filtro por advogado, exportação PDF/Excel, atalhos), clientes PF/PJ completos (nacionalidade, inscrições, representante, contatos, origem, duplicidade, exclusão com política de guarda, sem movimentação recente, ficha PDF/Excel, impressão, histórico, exportação, seleção múltipla/ações em lote/colunas), processos avançados (instância, juízo, polos, assuntos secundários, justiça gratuita, fase, OAB, histórico de responsáveis, movimentações importantes, sentença/recurso/suspensão/trânsito, 12 abas, duplicar, excluir arquivado sem vínculos, relatório PDF/Excel, exportação), pesquisa global em todos os módulos, central de notificações | ✅ |
 | 2 — Operação jurídica | Prazos (origem da comunicação, datas de disponibilização/publicação/ciência com sugestão da publicação no DJe, comprovante de cumprimento, histórico antes/depois, relatório por responsável, filtros por advogado/processo/cliente); agenda (novos tipos, agenda por advogado, recorrência, convidados com confirmação de presença, videoconferência, local, status e resultado, exportação .ics para Google Calendar/Outlook, relatório); módulos **Audiências** e **Tarefas**; central documental (pastas e subpastas, etiquetas, favoritos, renomear/mover/copiar, compartilhamento interno, lixeira com restauração e eliminação definitiva, versões, PDF/DOC/DOCX/XLS/XLSX/PPT/PPTX/JPG/PNG/TXT, envio múltiplo com arrastar e soltar, limite configurável, detecção de duplicidade, visualizador PDF com zoom, páginas, miniaturas, rotação, busca no texto, tela cheia e impressão); **Editor Jurídico** (14 modelos do sistema, modelos do escritório, campos automáticos de cliente/processo/escritório/advogado, cabeçalho/rodapé, numeração de páginas, PDF/DOCX, impressão, histórico de versões, rascunho/final, envio à central) | ✅ |
 | 3 — Gestão empresarial | Financeiro (novas categorias: sucumbência, recebimentos avulsos, tributos, materiais, custas, despesas processuais, deslocamentos, comissões; centros de custo; contas bancárias com saldo e extrato; baixa por conta; recibo em PDF no papel timbrado; cobranças com mensagem pronta, link oficial do WhatsApp e histórico); módulo **Honorários** (por cliente, processo, contrato e tipo — contratado, recebido, pendente, em atraso —, parcelas e histórico de pagamentos, percentual de êxito, comissões com regras por integrante, apuração, lançamento no contas a pagar sem duplicidade e "Minhas comissões"); contratos (prestação de serviços e administrativos, renovação com novas mensalidades e reajuste, histórico de renovações); CRM com as 9 etapas da especificação e propostas de honorários (rascunho, enviada, aceita/recusada, PDF); **Central de relatórios** com 19 relatórios em PDF/Excel | ✅ |
-| 4 — Integrações | Central Judicial (DataJud/PJe e demais, somente por interfaces oficiais), DJEN, WhatsApp Business, e-mail, Google Calendar, assinatura eletrônica | ⏳ |
+| 4 — Integrações | **Central Judicial**: catálogo de tribunais e sistemas com a forma oficial de acesso de cada um (DataJud/CNJ por API pública com chave; PJe, eproc, Projudi e e-SAJ sem API pública aberta → importação assistida e consulta no portal oficial, sem captura de tela nem senha judicial guardada); sincronização DataJud por processo e diária (movimentações sem duplicidade, campos vazios preenchidos, aviso ao responsável), histórico de execuções; **Publicações DJEN** (API Comunica PJe por OAB de cada advogado, 2×/dia, vínculo automático ao processo pelo nº CNJ, leitura, arquivamento e criação do prazo a partir da publicação); **importação assistida** por planilha CSV com modelo, validação de CNJ e relatório linha a linha; **central de comunicação** (histórico por cliente/processo, e-mail SMTP com anexos da central, WhatsApp Business Cloud API com modelos aprovados e recebimento por webhook assinado, registro de atendimentos, lembretes de retorno, modelos de mensagem com campos automáticos); convites da agenda por e-mail (.ics); **Google Agenda** por usuário (OAuth, envio dos compromissos e criação da sala do Meet); **assinatura eletrônica** ZapSign (envio de PDF da central, acompanhamento, via assinada guardada como nova versão) | ✅ |
 | 5 — Inteligência e segurança | IA jurídica com fontes verificáveis, automações, OCR, auditoria com antes/depois, 2FA, controle de dispositivos, LGPD (titulares, consentimentos, incidentes) | ⏳ |
 | 6 — Comercialização | Planos e assinatura, licenças, configurações do escritório (logotipo, cabeçalho de documentos), unidades/filiais, monitoramento | 🟡 (multi-tenant, painel master, planos e limite de usuários já existem) |
 
@@ -45,10 +45,16 @@ Pendências conhecidas da Fase 1: filtro do dashboard por **unidade do escritór
 Complementos da Fase 2: papel timbrado no Editor Jurídico; módulo **Reuniões** (Google Meet, Zoom, Teams ou
 presencial, sala com ata); Início ajustado ao celular; gráfico de receitas por categoria estabilizado.
 
-Pendências conhecidas da Fase 3: conciliação bancária automática (OFX/Open Finance), emissão de boletos/Pix e envio
-de cobranças por e-mail/WhatsApp pela API dependem de integrações autorizadas (Fase 4) — hoje a cobrança gera a
-mensagem e abre o WhatsApp/e-mail do próprio escritório; assinatura eletrônica de propostas e contratos (Fase 4);
-DRE por regime de competência.
+Pendências conhecidas da Fase 4: consulta autenticada ao PJe/MNI e aos demais sistemas exige certificado digital
+ICP-Brasil e convênio com cada tribunal — fica como fluxo assistido (portal oficial + importação de planilha e
+documentos), sem automação de login; o DataJud tem atraso de atualização definido pelo CNJ e não traz o teor das
+decisões; Zoom (criação de sala por API) e Microsoft Teams continuam por link colado e validado; a sincronização com
+o Google é de mão única (sistema → Google); assinatura com certificado ICP-Brasil (padrão PAdES) depende de outro
+provedor; envio de SMS não incluído.
+
+Pendências conhecidas da Fase 3: conciliação bancária automática (OFX/Open Finance) e emissão de boletos/Pix
+dependem de integração com instituição financeira; DRE por regime de competência. (Envio da cobrança por e-mail e
+assinatura eletrônica entraram na Fase 4.)
 
 Pendências conhecidas da Fase 2: criação automática das salas pelo sistema (API do Google Calendar/Meet e do Zoom,
 com OAuth do escritório) e a videochamada embutida via Zoom Meeting SDK dependem de credenciais das plataformas
@@ -70,7 +76,5 @@ comparação lado a lado entre versões do editor.
 * Calendários forenses estaduais/municipais pré-carregados (hoje cadastrados pelo escritório em *Prazos → Calendário forense*).
 * Regras especiais de contagem não presumidas: prazo em dobro (CPC, arts. 180, 183, 186 e 229), intimação eletrônica tácita e publicação no DJe — informadas pelo usuário.
 * Envio push (FCM) exige projeto Firebase real e chave VAPID; no Emulator Suite as notificações chegam pelo sino em tempo real.
-* Envio de e-mail transacional para convites (hoje o link é exibido ao administrador).
-* Integração com consulta processual oficial (ex.: DataJud/CNJ) — interface preparada em
-  `CaseMovement.source`; depende de credencial e termos de uso.
+* Envio do convite de acesso à equipe pelo e-mail transacional (o SMTP da Fase 4 já está disponível; hoje o link é exibido ao administrador).
 * Backup agendado do Firestore (`gcloud firestore export`) — documentado em `docs/SEGURANCA.md`.
