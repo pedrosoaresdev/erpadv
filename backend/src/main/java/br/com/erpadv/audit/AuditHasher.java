@@ -32,6 +32,24 @@ public final class AuditHasher {
         append(sb, log.getIp());
         Map<String, String> details = log.getDetails() == null ? Map.of() : new TreeMap<>(log.getDetails());
         details.forEach((k, v) -> append(sb, k + "=" + (v == null ? "" : v)));
+        // Campos da auditoria avançada entram no hash somente quando presentes: registros anteriores
+        // à Fase 5 mantêm exatamente o mesmo texto canônico e continuam verificáveis.
+        boolean v2 = notBlank(log.getActorName()) || notBlank(log.getModule()) || notBlank(log.getOrigin())
+                || notBlank(log.getJustification()) || (log.getChanges() != null && !log.getChanges().isEmpty());
+        if (v2) {
+            append(sb, "v2");
+            append(sb, log.getActorName());
+            append(sb, log.getModule());
+            append(sb, log.getOrigin());
+            append(sb, log.getJustification());
+            if (log.getChanges() != null) {
+                for (AuditChange c : log.getChanges()) {
+                    append(sb, c.getField());
+                    append(sb, c.getBefore());
+                    append(sb, c.getAfter());
+                }
+            }
+        }
         return sb.toString();
     }
 
@@ -45,6 +63,10 @@ public final class AuditHasher {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    private static boolean notBlank(String s) {
+        return s != null && !s.isBlank();
     }
 
     private static void append(StringBuilder sb, String value) {

@@ -9,7 +9,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService, firebaseAuthMessage } from '../../core/auth/auth.service';
 import { ToastService } from '../../core/services/toast.service';
 
-const AUTH_STYLES = `
+export const AUTH_STYLES = `
   .auth-card { padding: 36px 32px; }
   h2 { font-size: 24px; font-weight: 700; letter-spacing: -.3px; }
   .sub { margin: 6px 0 24px; color: var(--app-text-muted); line-height: 1.5; }

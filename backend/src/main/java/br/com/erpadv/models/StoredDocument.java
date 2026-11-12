@@ -48,4 +48,8 @@ public class StoredDocument extends BaseEntity {
     private java.time.Instant deletedAt;
     private String deletedBy;
     private String deletedByName;
+    /** Leitura do conteúdo: TEXTO_NATIVO, PENDENTE, PROCESSANDO, CONCLUIDO, SEM_TEXTO, INDISPONIVEL ou FALHOU (OCR). */
+    private String ocrStatus;
+    /** Palavras do conteúdo (texto nativo ou OCR) incluídas na busca da central documental. */
+    private List<String> contentTokens = new ArrayList<>();
 }

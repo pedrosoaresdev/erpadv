@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, DestroyRef } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatBadgeModule } from '@angular/material/badge';
@@ -16,6 +16,7 @@ import { PushService } from '../../core/services/push.service';
 import { ThemeService } from '../../core/services/theme.service';
 import { RelativeTimePipe } from '../../shared/pipes/format.pipes';
 import { GlobalSearchComponent } from './global-search';
+import { IdleService } from '../../core/services/idle.service';
 import { MOBILE_SHORTCUTS, NAV_SECTIONS, NavItem } from './nav-items';
 
 const COLLAPSE_KEY = 'erpadv.sidebar.collapsed';
@@ -55,6 +56,7 @@ export class MainLayoutComponent {
 
   private allowed(item: NavItem): boolean {
     // Itens sem permissão específica exigem pertencer a um escritório (ex.: notificações).
+    if (item.anyPermission) return this.auth.hasAny(item.anyPermission);
     return item.permission ? this.auth.has(item.permission) : !!this.auth.me()?.officeId;
   }
 
@@ -69,6 +71,7 @@ export class MainLayoutComponent {
       }
     });
     this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => this.mobileOpen.set(false));
+    inject(IdleService).start(inject(DestroyRef));
   }
 
   toggleSidebar(): void {

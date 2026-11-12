@@ -35,7 +35,8 @@ public class IntegrationService {
             IntegrationProvider.SMTP, Set.of("host", "port", "username", "fromAddress", "fromName", "starttls"),
             IntegrationProvider.WHATSAPP, Set.of("phoneNumberId", "businessAccountId", "displayNumber"),
             IntegrationProvider.GOOGLE_CALENDAR, Set.of(),
-            IntegrationProvider.ZAPSIGN, Set.of("sandbox"));
+            IntegrationProvider.ZAPSIGN, Set.of("sandbox"),
+            IntegrationProvider.ANTHROPIC, Set.of("pseudonymize"));
 
     public record ConnectorStatus(IntegrationProvider provider, String label, String category, String availability, String description,
                                   boolean enabled, boolean autoSync, String state, String stateLabel, Map<String, String> config,
@@ -53,6 +54,8 @@ public class IntegrationService {
     private final String defaultDataJudKey;
     private final boolean smtpFromEnvironment;
     private final boolean googleOAuthConfigured;
+    @Value("${app.ai.api-key:}")
+    private String defaultAnthropicKey;
 
     public IntegrationService(IntegrationRepositories.Settings settings, IntegrationRepositories.Runs runs, CryptoService crypto,
                               AuditService audit, @Value("${app.integrations.datajud.api-key:}") String defaultDataJudKey,
@@ -123,6 +126,7 @@ public class IntegrationService {
             case GOOGLE_CALENDAR -> googleOAuthConfigured;
             case WHATSAPP -> s != null && notBlank(s.getConfig().get("phoneNumberId")) && s.getSecretsEnc().containsKey("accessToken");
             case ZAPSIGN -> s != null && s.getSecretsEnc().containsKey("apiToken");
+            case ANTHROPIC -> (defaultAnthropicKey != null && !defaultAnthropicKey.isBlank()) || (s != null && s.getSecretsEnc().containsKey("apiKey"));
             default -> false;
         };
     }
@@ -134,14 +138,22 @@ public class IntegrationService {
         return enabled && isConfigured(p, s);
     }
 
-    /** Sem configuração salva: consultas públicas, SMTP do ambiente e Google (OAuth do servidor) ficam ativos. */
+    /**
+     * Sem configuração salva, só o e-mail do ambiente fica ativo (convites e cobranças). Integrações com tribunais, Google
+     * e IA ficam desligadas: o escritório trabalha de forma manual e elas só funcionam se forem ativadas explicitamente.
+     */
     private boolean defaultOn(IntegrationProvider p) {
-        return p == IntegrationProvider.DATAJUD || p == IntegrationProvider.DJEN
-                || (p == IntegrationProvider.SMTP && smtpFromEnvironment) || p == IntegrationProvider.GOOGLE_CALENDAR;
+        return p == IntegrationProvider.SMTP && smtpFromEnvironment;
     }
 
     private static boolean defaultAutoSync(IntegrationProvider p) {
         return p == IntegrationProvider.DJEN || p == IntegrationProvider.DATAJUD;
+    }
+
+    /** Chave da IA: a do escritório (cifrada) ou a do ambiente do servidor. */
+    public String anthropicKey(String officeId) {
+        String own = secret(officeId, IntegrationProvider.ANTHROPIC, "apiKey");
+        return own != null && !own.isBlank() ? own : defaultAnthropicKey;
     }
 
     public boolean autoSync(String officeId, IntegrationProvider p) {

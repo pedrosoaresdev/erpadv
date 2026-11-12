@@ -7,6 +7,8 @@ export interface NavItem {
   queryParams?: Record<string, string>;
   /** Permissão exigida; ausente = qualquer integrante da equipe. */
   permission?: Permission;
+  /** Alternativa a {@code permission}: basta ter uma destas. */
+  anyPermission?: Permission[];
   /** Módulo ainda não implantado: aparece desabilitado com a fase prevista do roadmap. */
   phase?: number;
 }
@@ -24,7 +26,6 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Dashboard', icon: 'space_dashboard', route: '/dashboard', permission: 'DASHBOARD_VIEW' },
       { label: 'Clientes', icon: 'groups', route: '/clientes', permission: 'CLIENTS_READ' },
       { label: 'Processos', icon: 'gavel', route: '/processos', permission: 'CASES_READ' },
-      { label: 'Central Judicial', icon: 'account_balance', route: '/central-judicial', permission: 'CASES_READ' },
       { label: 'Prazos', icon: 'alarm', route: '/prazos', permission: 'DEADLINES_READ' },
       { label: 'Agenda', icon: 'calendar_month', route: '/agenda', permission: 'CALENDAR_READ' },
       { label: 'Audiências', icon: 'record_voice_over', route: '/audiencias', permission: 'CALENDAR_READ' },
@@ -46,19 +47,9 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    title: 'Inteligência',
+    title: 'Atendimento ao cliente',
     items: [
-      { label: 'IA Jurídica', icon: 'auto_awesome', permission: 'AI_USE', phase: 5 },
-      { label: 'Pesquisa Jurídica', icon: 'travel_explore', permission: 'AI_USE', phase: 5 },
-      { label: 'Automação de Rotinas', icon: 'bolt', permission: 'SETTINGS_MANAGE', phase: 5 },
-    ],
-  },
-  {
-    title: 'Comunicação',
-    items: [
-      { label: 'Atendimento', icon: 'support_agent', route: '/comunicacao', permission: 'MESSAGES_USE' },
-      { label: 'WhatsApp', icon: 'chat', route: '/comunicacao', queryParams: { canal: 'WHATSAPP' }, permission: 'MESSAGES_USE' },
-      { label: 'E-mails', icon: 'mail', route: '/comunicacao', queryParams: { canal: 'EMAIL' }, permission: 'MESSAGES_USE' },
+      { label: 'Recibos', icon: 'receipt_long', route: '/recibos', anyPermission: ['FINANCE_READ', 'DOCUMENTS_READ'] },
       { label: 'Notificações', icon: 'notifications', route: '/notificacoes' },
     ],
   },
@@ -68,8 +59,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Equipe', icon: 'badge', route: '/equipe', permission: 'EMPLOYEES_READ' },
       { label: 'Permissões', icon: 'admin_panel_settings', route: '/equipe', queryParams: { aba: 'cargos' }, permission: 'EMPLOYEES_READ' },
       { label: 'Auditoria', icon: 'verified_user', route: '/auditoria', permission: 'AUDIT_READ' },
-      { label: 'Segurança', icon: 'shield_lock', permission: 'SETTINGS_MANAGE', phase: 5 },
-      { label: 'Integrações', icon: 'hub', route: '/integracoes' },
+      { label: 'Segurança', icon: 'shield_lock', route: '/seguranca' },
+      { label: 'LGPD', icon: 'privacy_tip', route: '/lgpd', permission: 'LGPD_MANAGE' },
       { label: 'Configurações', icon: 'settings', permission: 'SETTINGS_MANAGE', phase: 6 },
       { label: 'Plano e Assinatura', icon: 'workspace_premium', permission: 'SETTINGS_MANAGE', phase: 6 },
     ],

@@ -13,7 +13,7 @@ import {
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../api/api.service';
 import { FirebaseService } from '../config/firebase.service';
-import { Me, Permission } from '../models/models';
+import { Me, Permission, SessionStatus } from '../models/models';
 
 /**
  * Estado de autenticação. O Firebase Auth cuida da identidade (senha, e-mail, tokens);
@@ -27,6 +27,8 @@ export class AuthService {
 
   readonly user = signal<User | null>(null);
   readonly me = signal<Me | null>(null);
+  /** Situação da sessão no servidor (2FA, inatividade, justificativa); só para integrantes de um escritório. */
+  readonly security = signal<SessionStatus | null>(null);
   readonly initialized = signal(false);
 
   readonly permissions = computed(() => new Set(this.me()?.permissions ?? []));
@@ -80,8 +82,25 @@ export class AuthService {
 
   async loadMe(): Promise<Me> {
     const me = await firstValueFrom(this.api.get<Me>('/auth/me', undefined, true));
+    if (me.officeId && !me.onboardingRequired && me.role !== 'CLIENTE' && me.role !== 'MASTER') {
+      await this.loadSecurity();
+    } else {
+      this.security.set(null);
+    }
     this.me.set(me);
     return me;
+  }
+
+  async loadSecurity(): Promise<SessionStatus | null> {
+    const status = await firstValueFrom(this.api.get<SessionStatus>('/security/session', undefined, true)).catch(() => null);
+    this.security.set(status);
+    return status;
+  }
+
+  /** Segundo fator pendente nesta sessão (configuração exigida ou código a confirmar). */
+  mfaPending(): boolean {
+    const s = this.security();
+    return !!s && (s.enrollmentRequired || (s.mfaRequired && !s.mfaVerified));
   }
 
   async login(email: string, password: string): Promise<Me> {
@@ -127,6 +146,7 @@ export class AuthService {
   async logout(redirect = true): Promise<void> {
     await signOut(this.firebase.auth);
     this.me.set(null);
+    this.security.set(null);
     this.user.set(null);
     if (redirect) {
       await this.router.navigate(['/login']);
@@ -139,6 +159,7 @@ export class AuthService {
     if (me.emailVerificationRequired) return '/verificar-email';
     if (me.role === 'MASTER' && !me.officeId) return '/plataforma';
     if (me.onboardingRequired) return '/primeiro-acesso';
+    if (this.mfaPending()) return '/verificacao-2fa';
     if (me.role === 'CLIENTE') return '/sem-acesso';
     return '/dashboard';
   }

@@ -53,7 +53,29 @@ public class AuditService {
 
     public void record(AuthenticatedUser actor, String officeId, String action, String entityType, String entityId,
                        String summary, Map<String, String> details) {
+        record(actor, officeId, action, entityType, entityId, summary, details, List.of());
+    }
+
+    /** Retrato do registro no formato gravado (para comparar antes × depois). */
+    public Map<String, Object> snapshot(Object entity) {
+        return entity == null ? null : new java.util.HashMap<>(mapper.toMap(entity));
+    }
+
+    /** Registra uma alteração com os valores anteriores e posteriores de cada campo modificado. */
+    public void recordChange(AuthenticatedUser actor, String action, String entityType, String entityId, String summary,
+                             Map<String, String> details, Map<String, Object> before, Object after) {
+        List<AuditChange> changes = AuditDiff.diff(before, after == null ? null : snapshot(after));
+        record(actor, actor.officeId(), action, entityType, entityId, summary, details, changes);
+    }
+
+    private void record(AuthenticatedUser actor, String officeId, String action, String entityType, String entityId,
+                        String summary, Map<String, String> details, List<AuditChange> changes) {
         AuditLog entry = new AuditLog();
+        entry.setActorName(actor == null ? "Sistema" : actor.displayName());
+        entry.setModule(AuditDiff.module(entityType));
+        entry.setOrigin(RequestInfo.origin());
+        entry.setJustification(RequestInfo.justification());
+        entry.setChanges(changes == null ? new ArrayList<>() : new ArrayList<>(changes));
         entry.setOfficeId(officeId);
         entry.setAt(Instant.now());
         entry.setActorUid(actor == null ? "system" : actor.uid());
@@ -97,8 +119,38 @@ public class AuditService {
 
     public CursorPage<AuditLog> list(String officeId, String entityType, String entityId, String actorUid,
                                      String cursor, int size) {
-        int limit = Math.max(1, Math.min(size, 100));
-        Query query = db.collection("offices").document(officeId).collection("audit_logs");
+        return list(officeId, new Filter(entityType, entityId, actorUid, null, null, null, null), cursor, size);
+    }
+
+    /** Filtros da consulta. Período é convertido em faixa de {@code seq} (a sequência cresce com o tempo). */
+    public record Filter(String entityType, String entityId, String actorUid, String module, String action,
+                         Instant from, Instant to) {
+    }
+
+    public CursorPage<AuditLog> list(String officeId, Filter f, String cursor, int size) {
+        int limit = Math.max(1, Math.min(size, 500));
+        String entityType = f.entityType();
+        String entityId = f.entityId();
+        String actorUid = f.actorUid();
+        CollectionReference col = db.collection("offices").document(officeId).collection("audit_logs");
+        Query query = col;
+        if (f.module() != null && !f.module().isBlank()) {
+            query = query.whereEqualTo("module", f.module());
+        }
+        if (f.action() != null && !f.action().isBlank()) {
+            query = query.whereEqualTo("action", f.action().trim().toUpperCase(java.util.Locale.ROOT));
+        }
+        Long minSeq = f.from() == null ? null : seqAt(col, f.from(), true);
+        Long maxSeq = f.to() == null ? null : seqAt(col, f.to(), false);
+        if ((f.from() != null && minSeq == null) || (f.to() != null && maxSeq == null)) {
+            return new CursorPage<>(List.of(), null);
+        }
+        if (minSeq != null) {
+            query = query.whereGreaterThanOrEqualTo("seq", minSeq);
+        }
+        if (maxSeq != null) {
+            query = query.whereLessThanOrEqualTo("seq", maxSeq);
+        }
         if (entityType != null && !entityType.isBlank()) {
             query = query.whereEqualTo("entityType", entityType);
         }
@@ -124,6 +176,14 @@ public class AuditService {
         }
         String next = docs.size() > limit ? String.valueOf(items.get(items.size() - 1).getSeq()) : null;
         return new CursorPage<>(items, next);
+    }
+
+    /** Primeiro registro a partir de {@code at} (ou último até {@code at}); nulo se não houver. */
+    private Long seqAt(CollectionReference col, Instant at, boolean first) {
+        Query q = first ? col.whereGreaterThanOrEqualTo("at", at.toEpochMilli()).orderBy("at").limit(1)
+                : col.whereLessThanOrEqualTo("at", at.toEpochMilli()).orderBy("at", Query.Direction.DESCENDING).limit(1);
+        List<QueryDocumentSnapshot> docs = Futures.await(q.get()).getDocuments();
+        return docs.isEmpty() ? null : docs.get(0).getLong("seq");
     }
 
     /** Recalcula a cadeia inteira (em lotes) e aponta o primeiro registro adulterado ou ausente. */

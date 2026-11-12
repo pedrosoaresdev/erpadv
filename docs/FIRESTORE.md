@@ -58,7 +58,7 @@ auditoria). Campos comuns a todas as entidades:
 | Tarefas | módulo *Tarefas* | usa `boards`/`board_cards`: quadro padrão "Tarefas do escritório" (modelo `tarefas`) criado no primeiro uso; a lista reúne cartões de todos os quadros |
 | `notifications` | notificações por usuário | `recipientUid`, `type`, `title`, `body`, `link`, `read` |
 | `messages` | comunicação interna / portal | `threadId`, `fromUid`, `toUids[]`, `body`, `clientVisible` |
-| `audit_logs` | trilha imutável | `seq`, `action`, `entityType`, `entityId`, `actorUid`, `actorEmail`, `ip`, `details{}`, `prevHash`, `hash`, `at` |
+| `audit_logs` | trilha imutável | `seq`, `action`, `entityType`, `entityId`, `actorUid`, `actorEmail`, `ip`, `details{}`, `prevHash`, `hash`, `at`; desde a Fase 5 também `actorName`, `module`, `origin`, `justification` e `changes[]` (`field`, `before`, `after`) — incluídos no hash só quando presentes |
 | `audit_meta/chain` | cabeça da cadeia | `lastSeq`, `lastHash` |
 | `ai_interactions` | uso da IA | `agent`, `uid`, `promptHash`, `model`, `tokens`, `reviewedBy` |
 | `system_settings` | configurações do escritório | `modules{}`, `notifications{}`, `integrations{}` |
@@ -69,6 +69,21 @@ auditoria). Campos comuns a todas as entidades:
 | `communications` | central de comunicação | `channel` (`EMAIL`/`WHATSAPP`/`TELEFONE`/`PRESENCIAL`/`CARTA`/`INTERNO`), `direction` (`SAIDA`/`ENTRADA`), `status` (`ENVIADO`/`FALHOU`/`RECEBIDO`/`REGISTRADO`), `clientId`, `clientName`, `caseId`, `caseNumber`, `address`, `subject`, `body`, `error`, `attachments[]`, `externalId` (id da mensagem no provedor), `templateName`, `followUpDate`, `followUpDone`, `followUpNotified`, `createdByName`, `restricted` |
 | `message_templates` | modelos de mensagem | `name`, `channel`, `subject`, `body` (campos `{{grupo.campo}}`), `whatsappTemplate` (nome do modelo aprovado na Meta), `createdByName` |
 | `signature_requests` | assinatura eletrônica | `documentId`, `documentTitle`, `externalToken`, `status` (`ENVIADO`/`ASSINADO`/`RECUSADO`/`CANCELADO`), `signers[]` (`name`, `email`, `status`, `signUrl`, `signedAt`), `signedFileUrl`, `signedStored`, `signedVersion`, `sandbox`, `createdByName`, `completedAt` |
+| `security_settings/policy` | política de segurança | `requireJustificationOnDelete`, `mfaRequirement` (`NENHUM`/`ADMINISTRADORES`/`EQUIPE`), `sessionMaxHours`, `idleMinutes`, `newDeviceAlert`, `backupEnabled`, `backupRetentionDays`, `updatedByName` |
+| `user_sessions` | sessões de login (ID = hash de uid + `auth_time`) | `uid`, `userName`, `authTime`, `lastSeenAt`, `ip`, `userAgent`, `device`, `mobile`, `newDevice`, `mfaVerified`, `revoked`, `revokedAt`, `revokedByName`, `endReason` |
+| `security_events` | eventos de segurança | `type`, `severity` (`INFO`/`ATENCAO`/`CRITICO`), `description`, `uid`, `userName`, `ip`, `userAgent`, `at`, `details{}` |
+| `backups` | backups lógicos | `trigger`, `status`, `storagePath` (arquivo cifrado no Storage), `sizeBytes`, `sha256`, `documents`, `collections{}`, `completedAt`, `error` |
+| `lgpd_requests` | solicitações de titulares | `protocol`, `type`, `requesterName/Email/Phone`, `clientId`, `channel`, `description`, `receivedDate`, `dueDate`, `identityVerified`, `status`, `response`, `respondedAt`, `history[]` |
+| `consents` | consentimentos | `clientId`, `clientName`, `purpose`, `channel`, `evidence`, `documentId`, `grantedDate`, `expiresDate`, `revoked`, `revokedDate`, `revocationNote` |
+| `processing_activities` | registro das operações de tratamento | `name`, `purpose`, `legalBasis`, `sensitiveData`, `sensitiveBasis`, `dataCategories[]`, `dataSubjects[]`, `sharedWith[]`, `retention`, `internationalTransfer`, `securityMeasures`, `responsibleName`, `active`, `suggestion` |
+| `incidents` | incidentes com dados pessoais | `title`, `description`, `discoveredAt`, `occurredAt`, `dataCategories[]`, `affectedSubjects`, `sensitiveData`, `risk`, `anpdNotificationRequired`, `anpdDeadline`, `anpdNotifiedDate`, `anpdProtocol`, `subjectsNotifiedDate`, `containmentMeasures`, `status`, `timeline[]` |
+| `data_shares` | compartilhamentos com terceiros | `recipient`, `recipientType`, `clientId`, `caseId`, `dataDescription`, `purpose`, `legalBasis`, `sharedDate` |
+| `privacy_policies` | política de privacidade versionada | `version`, `title`, `content` (HTML saneado), `published`, `publishedAt`, `publishedByName` |
+| `retention_rules` | prazo de guarda por categoria (ID = categoria) | `category`, `years`, `legalReference` |
+| `receipts` | recibos e declarações | `number` (REC-AAAA-NNNN), `kind`, `clientId`, `clientName`, `payerName`, `payerDocumentMasked`, `amountCents`, `description`, `date`, `paymentMethod`, `caseId`, `transactionId`, `city`, `issuerName`, `documentId`, `canceled`, `cancelReason`, `canceledAt` |
+| `counters/receipts-AAAA` | numeração dos recibos | `value` |
+| `document_texts` | texto dos documentos (ID = documentId) | `version`, `engine` (texto do arquivo ou OCR), `status`, `pages`, `text`, `restricted`, `error` |
+| `ai_conversations` | conversas com a IA (fora da interface, uso futuro) | `uid`, `agent`, `task`, `title`, `caseId`, `clientId`, `documentIds[]`, `messages[]` (texto, fontes, extração, revisão), `inputTokens`, `outputTokens` |
 | `google_links` | conta Google de cada usuário (ID = uid) | `email`, `refreshTokenEnc`, `accessTokenEnc` (cifrados), `accessExpiresAt`, `connectedAt` |
 
 Coleção global `system_locks/{job}`: trava distribuída dos jobs agendados (`owner`, `lockedUntil`).

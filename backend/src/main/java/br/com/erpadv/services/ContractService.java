@@ -155,13 +155,15 @@ public class ContractService {
 
     public ContractResponse update(AuthenticatedUser user, String id, ContractRequest req) {
         Contract c = load(user, id);
+        Map<String, Object> auditBefore = audit.snapshot(c);
         if (c.getStatus() == ContractStatus.CANCELADO || c.getStatus() == ContractStatus.ENCERRADO) {
             throw new BusinessException("CONTRACT_CLOSED", "Contrato encerrado ou cancelado não pode ser alterado.");
         }
         apply(user, c, req, c.getStatus() == ContractStatus.RASCUNHO);
         touch(user, c);
         contracts.save(user.officeId(), c);
-        audit.record(user, "CONTRACT_UPDATED", "contract", id, "Contrato atualizado: " + c.getNumber());
+        audit.recordChange(user, "CONTRACT_UPDATED", "contract", id, "Contrato atualizado: " + c.getNumber(),
+                Map.of(), auditBefore, c);
         return ContractResponse.of(c, FinanceService.today(), true);
     }
 

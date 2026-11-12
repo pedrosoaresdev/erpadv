@@ -121,6 +121,10 @@ public class ClientService {
     public ClientResponse update(AuthenticatedUser user, String id, ClientRequest req) {
         String officeId = user.requireOffice();
         Client client = load(user, id);
+        if (client.getAnonymizedAt() != null) {
+            throw new BusinessException("CLIENT_ANONYMIZED", "Cliente anonimizado (LGPD): os dados pessoais não podem ser recadastrados neste registro.");
+        }
+        Map<String, Object> auditBefore = audit.snapshot(client);
         String docDigits = req.document() == null || req.document().isBlank()
                 ? crypto.decrypt(client.getDocumentEnc())
                 : BrazilianDocuments.digits(req.document());
@@ -145,8 +149,8 @@ public class ClientService {
         client.setUpdatedAt(Instant.now());
         client.setUpdatedBy(user.uid());
         clients.save(officeId, client);
-        audit.record(user, "CLIENT_UPDATED", "client", id, "Cliente atualizado: " + client.getName(),
-                Map.of("fields", String.join(",", changed)));
+        audit.recordChange(user, "CLIENT_UPDATED", "client", id, "Cliente atualizado: " + client.getName(),
+                Map.of("fields", String.join(",", changed)), auditBefore, client);
         return toResponse(client, user.has(Permission.CLIENTS_SENSITIVE_READ));
     }
 

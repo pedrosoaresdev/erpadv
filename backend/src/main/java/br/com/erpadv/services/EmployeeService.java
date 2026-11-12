@@ -163,6 +163,7 @@ public class EmployeeService {
 
     public EmployeeResponse update(AuthenticatedUser actor, String uid, UpdateEmployeeRequest req) {
         UserProfile profile = load(actor, uid);
+        Map<String, Object> auditBefore = audit.snapshot(profile);
         assertCanManage(actor, profile);
         CustomRole customRole = customRole(profile.getOfficeId(), req.customRoleId());
         Role newRole = customRole != null ? customRole.getBaseRole() : req.role() != null ? req.role() : profile.getRole();
@@ -223,7 +224,8 @@ public class EmployeeService {
                 + (profile.getCustomRoleName() == null ? "-" : profile.getCustomRoleName()));
         details.put("granted", granted.toString());
         details.put("revoked", revoked.toString());
-        audit.record(actor, "EMPLOYEE_UPDATED", "user", uid, "Acesso atualizado: " + profile.getEmail(), details);
+        audit.recordChange(actor, "EMPLOYEE_UPDATED", "user", uid, "Acesso atualizado: " + profile.getEmail(), details,
+                auditBefore, profile);
         return response(profile);
     }
 

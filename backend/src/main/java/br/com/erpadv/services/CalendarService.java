@@ -429,6 +429,7 @@ public class CalendarService {
 
     public AppointmentResponse update(AuthenticatedUser user, String id, AppointmentRequest req) {
         Appointment a = load(user, id);
+        Map<String, Object> auditBefore = audit.snapshot(a);
         List<String> previous = new ArrayList<>(a.getResponsibleUids());
         Instant previousStart = a.getStart();
         apply(user, a, req);
@@ -439,7 +440,8 @@ public class CalendarService {
         a.setUpdatedBy(user.uid());
         appointments.save(user.officeId(), a);
         pushGoogle(user.officeId(), a);
-        audit.record(user, "APPOINTMENT_UPDATED", "appointment", id, a.getType().label() + ": " + a.getTitle());
+        audit.recordChange(user, "APPOINTMENT_UPDATED", "appointment", id, a.getType().label() + ": " + a.getTitle(),
+                Map.of(), auditBefore, a);
         List<String> added = a.getResponsibleUids().stream().filter(uid -> !previous.contains(uid)).toList();
         notifyResponsibles(user, a, added, "Você foi incluído em um compromisso");
         if (!previousStart.equals(a.getStart())) {

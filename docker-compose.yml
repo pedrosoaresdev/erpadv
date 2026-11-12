@@ -27,6 +27,7 @@ services:
       - emulator-data:/data
     networks: [erpadv]
     stop_grace_period: 90s
+    restart: unless-stopped
     logging: *default-logging
 
   backend:
@@ -55,6 +56,9 @@ services:
       MAIL_FROM: ${MAIL_FROM:-nao-responda@erpadv.local}
       PUBLIC_APP_URL: https://localhost:${HTTPS_PORT:-8443}
       DATAJUD_API_KEY: ${DATAJUD_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5-5}
+      AI_FALLBACKS: ${AI_FALLBACKS:-default}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}

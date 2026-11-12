@@ -54,7 +54,8 @@ export const permissionGuard: CanActivateFn = (route) => {
   const router = inject(Router);
   const toast = inject(ToastService);
   const required = route.data['permission'] as Permission | undefined;
-  if (!required || auth.has(required)) {
+  const any = route.data['anyPermission'] as Permission[] | undefined;
+  if (any ? auth.hasAny(any) : !required || auth.has(required)) {
     return true;
   }
   toast.error('Você não tem permissão para acessar este módulo.');

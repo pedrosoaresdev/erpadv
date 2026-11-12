@@ -49,4 +49,6 @@ public class Client extends BaseEntity {
     private Instant inactivatedAt;
     private String inactivationReason;
     private List<String> searchTokens = new ArrayList<>();
+    /** Preenchido quando o cliente foi anonimizado (LGPD): dados pessoais removidos, histórico financeiro mantido. */
+    private Instant anonymizedAt;
 }

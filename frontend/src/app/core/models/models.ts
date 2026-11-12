@@ -21,7 +21,7 @@ export type Permission =
   | 'FINANCE_READ' | 'FINANCE_WRITE' | 'CONTRACTS_READ' | 'CONTRACTS_WRITE'
   | 'DOCUMENTS_READ' | 'DOCUMENTS_WRITE' | 'DOCUMENTS_CONFIDENTIAL' | 'DOCUMENTS_DELETE'
   | 'CRIMINAL_READ' | 'CRIMINAL_WRITE' | 'AI_USE' | 'MESSAGES_USE' | 'BOARDS_USE' | 'CRM_USE' | 'REPORTS_VIEW'
-  | 'EMPLOYEES_READ' | 'EMPLOYEES_MANAGE' | 'AUDIT_READ' | 'ADMIN_PANEL' | 'SETTINGS_MANAGE'
+  | 'EMPLOYEES_READ' | 'EMPLOYEES_MANAGE' | 'AUDIT_READ' | 'ADMIN_PANEL' | 'SETTINGS_MANAGE' | 'LGPD_MANAGE'
   | 'PLATFORM_ADMIN' | 'PORTAL_ACCESS';
 
 export type Role =
@@ -358,8 +358,90 @@ export interface AuditLog {
   summary: string;
   details: Record<string, string>;
   ip: string | null;
+  userAgent?: string | null;
   hash: string;
   prevHash: string;
+  actorName?: string | null;
+  module?: string | null;
+  origin?: 'WEB' | 'CELULAR' | 'WEBHOOK' | 'SISTEMA' | 'API' | null;
+  justification?: string | null;
+  changes?: AuditChange[];
+}
+
+export interface AuditChange {
+  field: string;
+  before: string;
+  after: string;
+}
+
+// ------------------------------------------------------------------ segurança
+export interface SessionStatus {
+  sessionId: string | null;
+  mfaEnabled: boolean;
+  mfaRequired: boolean;
+  mfaVerified: boolean;
+  enrollmentRequired: boolean;
+  idleMinutes: number;
+  sessionMaxHours: number;
+  requireJustificationOnDelete: boolean;
+  authTime: string | null;
+}
+
+export interface UserSessionView {
+  id: string;
+  uid: string;
+  userName: string;
+  device: string;
+  mobile: boolean;
+  ip: string | null;
+  authTime: string;
+  lastSeenAt: string;
+  newDevice: boolean;
+  mfaVerified: boolean;
+  current: boolean;
+}
+
+export type SecuritySeverity = 'INFO' | 'ATENCAO' | 'CRITICO';
+
+export interface SecurityEvent {
+  id: string;
+  type: string;
+  severity: SecuritySeverity;
+  description: string;
+  uid: string | null;
+  userName: string | null;
+  ip: string | null;
+  userAgent: string | null;
+  at: string;
+}
+
+export type MfaRequirement = 'NENHUM' | 'ADMINISTRADORES' | 'EQUIPE';
+
+export interface SecurityPolicy {
+  requireJustificationOnDelete: boolean;
+  mfaRequirement: MfaRequirement;
+  sessionMaxHours: number;
+  idleMinutes: number;
+  newDeviceAlert: boolean;
+  backupEnabled: boolean;
+  backupRetentionDays: number;
+  updatedAt?: string | null;
+  updatedByName?: string | null;
+}
+
+export interface MemberMfa {
+  uid: string;
+  name: string;
+  email: string;
+  role: string | null;
+  mfaEnabled: boolean;
+  mfaEnabledAt: string | null;
+}
+
+export interface MfaSetup {
+  secret: string;
+  otpauthUri: string;
+  qrSvg: string;
 }
 
 export interface AuditVerifyResult {

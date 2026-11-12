@@ -241,7 +241,7 @@ public class CommunicationService {
             }
             notifications.notify(officeId, c.getCreatedBy(), "FOLLOW_UP", "Retornar ao cliente hoje",
                     (c.getClientName() == null ? "Contato" : c.getClientName()) + (c.getSubject() == null ? "" : " — " + c.getSubject()),
-                    c.getClientId() == null ? "/comunicacao" : "/clientes/" + c.getClientId());
+                    c.getClientId() == null ? "/notificacoes" : "/clientes/" + c.getClientId());
             c.setFollowUpNotified(true);
             communications.save(officeId, c);
             n++;
@@ -273,7 +273,7 @@ public class CommunicationService {
             c.setClientName(client.getName());
             if (client.getResponsibleUid() != null) {
                 notifications.notify(officeId, client.getResponsibleUid(), "WHATSAPP", "Mensagem de " + client.getName() + " no WhatsApp",
-                        c.getBody().length() > 120 ? c.getBody().substring(0, 120) + "…" : c.getBody(), "/comunicacao?cliente=" + client.getId());
+                        c.getBody().length() > 120 ? c.getBody().substring(0, 120) + "…" : c.getBody(), "/clientes/" + client.getId());
             }
         }
         communications.save(officeId, c);

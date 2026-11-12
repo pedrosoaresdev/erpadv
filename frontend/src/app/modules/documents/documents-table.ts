@@ -22,7 +22,6 @@ import { saveBlob } from '../finance/finance.service';
 import {
   DocumentMoveDialogComponent, DocumentShareDialogComponent, DocumentUploadDialogComponent, DocumentViewerDialogComponent,
 } from './document-dialogs';
-import { SignatureDialogComponent } from '../integrations/signature-dialog';
 import {
   DOCUMENT_CATEGORY_LABELS, DocumentCategory, DocumentQuery, DocumentsService, FolderNode, StoredDocument, fileExtension, formatBytes,
 } from './documents.service';
@@ -151,7 +150,6 @@ export interface DocumentView {
                           <button mat-menu-item (click)="edit(d)"><mat-icon>edit</mat-icon>Renomear / editar informações</button>
                           <button mat-menu-item (click)="moveOrCopy([d], 'move')"><mat-icon>drive_file_move</mat-icon>Mover para pasta</button>
                           <button mat-menu-item (click)="moveOrCopy([d], 'copy')"><mat-icon>file_copy</mat-icon>Fazer uma cópia</button>
-                          @if (d.contentType === 'application/pdf') { <button mat-menu-item (click)="sign(d)"><mat-icon>draw</mat-icon>Assinatura eletrônica</button> }
                           <button mat-menu-item (click)="toggleArchive(d)"><mat-icon>{{ d.archived ? 'unarchive' : 'archive' }}</mat-icon>{{ d.archived ? 'Desarquivar' : 'Arquivar' }}</button>
                           @if (!d.contractId) { <button mat-menu-item (click)="trash(d)"><mat-icon>delete</mat-icon>Enviar para a lixeira</button> }
                         }
@@ -354,11 +352,6 @@ export class DocumentsTableComponent {
       .afterClosed().subscribe((n) => {
         if (n) { this.toast.success(mode === 'move' ? `${n} documento(s) movido(s).` : `${n} cópia(s) criada(s).`); this.refresh(); }
       });
-  }
-
-  sign(d: StoredDocument): void {
-    this.dialog.open(SignatureDialogComponent, { data: { documentId: d.id, title: d.title }, width: '820px', maxWidth: '96vw' })
-      .afterClosed().subscribe(() => this.refresh());
   }
 
   share(d: StoredDocument): void {

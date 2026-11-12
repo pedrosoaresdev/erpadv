@@ -118,9 +118,15 @@ class IntegrationsEndToEndTest {
         assertThat(catalog.findValuesAsText("provider")).contains("DATAJUD", "DJEN", "PJE", "WHATSAPP", "ZAPSIGN", "SMTP", "GOOGLE_CALENDAR");
         Map<String, String> states = new HashMap<>();
         catalog.forEach(c -> states.put(c.get("provider").asText(), c.get("state").asText()));
-        // sem configuração salva: consultas públicas ativas por padrão; tribunais sem API indicados como tais
-        assertThat(states).containsEntry("DATAJUD", "ATIVO").containsEntry("DJEN", "ATIVO").containsEntry("PJE", "SEM_API")
-                .containsEntry("SMTP", "NAO_CONFIGURADO").containsEntry("WHATSAPP", "NAO_CONFIGURADO");
+        // sem configuração salva tudo fica desligado (o escritório trabalha manualmente); tribunais sem API indicados como tais
+        assertThat(states).containsEntry("DATAJUD", "DESATIVADO").containsEntry("DJEN", "DESATIVADO").containsEntry("PJE", "SEM_API")
+                .containsEntry("SMTP", "NAO_CONFIGURADO").containsEntry("WHATSAPP", "NAO_CONFIGURADO").containsEntry("ANTHROPIC", "NAO_CONFIGURADO");
+        mvc.perform(auth(post("/api/integrations/datajud/cases/" + caseId))).andExpect(status().is4xxClientError())
+                .andExpect(jsonPath("$.code").value("INTEGRATION_DISABLED"));
+        for (String provider : List.of("DATAJUD", "DJEN")) {
+            mvc.perform(json(put("/api/integrations/" + provider), Map.of("enabled", true, "autoSync", false, "config", Map.of(), "secrets", Map.of())))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.state").value("ATIVO"));
+        }
 
         // ------------------------------------------------------------------ 2. DataJud (API pública do CNJ)
         mvc.perform(auth(post("/api/integrations/datajud/cases/" + caseId))).andExpect(status().isOk())

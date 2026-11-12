@@ -145,6 +145,7 @@ public class DeadlineService {
 
     public DeadlineResponse update(AuthenticatedUser user, String id, DeadlineRequest req) {
         Deadline d = load(user, id);
+        Map<String, Object> auditBefore = audit.snapshot(d);
         if (d.getStatus() != DeadlineStatus.PENDENTE) {
             throw new BusinessException("DEADLINE_CLOSED", "Reabra o prazo para editá-lo.");
         }
@@ -171,7 +172,8 @@ public class DeadlineService {
         if (!Objects.equals(previousDescription, d.getDescription())) {
             changes.put("description", previousDescription + "->" + d.getDescription());
         }
-        audit.record(user, "DEADLINE_UPDATED", "deadline", id, "Prazo atualizado: " + d.getDescription(), changes);
+        audit.recordChange(user, "DEADLINE_UPDATED", "deadline", id, "Prazo atualizado: " + d.getDescription(),
+                changes, auditBefore, d);
         if (!d.getResponsibleUid().equals(previousResponsible)) {
             notifyResponsible(user, d, "Prazo transferido para você");
         }

@@ -29,7 +29,11 @@ public enum IntegrationProvider {
             List.of()),
     ZAPSIGN("Assinatura eletrônica (ZapSign)", "ASSINATURA", Availability.CREDENCIAL,
             "Envio de contratos, procurações e documentos para assinatura eletrônica com trilha de auditoria do provedor.",
-            List.of("apiToken", "webhookSecret"));
+            List.of("apiToken", "webhookSecret")),
+    ANTHROPIC("IA jurídica (Claude, da Anthropic)", "IA", Availability.CREDENCIAL,
+            "Agentes de IA para resumos, análise de documentos, minutas e pesquisa com fontes oficiais. Os dados enviados são tratados pela "
+                    + "Anthropic como operadora (sem uso para treinamento pela API); ative somente após avaliar a base legal e o sigilo.",
+            List.of("apiKey"));
 
     public enum Availability { API_PUBLICA, CREDENCIAL, SEM_API }
 

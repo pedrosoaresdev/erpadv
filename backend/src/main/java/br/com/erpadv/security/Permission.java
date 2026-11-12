@@ -48,6 +48,7 @@ public enum Permission {
     AUDIT_READ("admin", "Consultar trilha de auditoria"),
     ADMIN_PANEL("admin", "Painel master do escritório"),
     SETTINGS_MANAGE("admin", "Configurar módulos e integrações"),
+    LGPD_MANAGE("admin", "Gerir LGPD: titulares, consentimentos, incidentes e retenção"),
     PLATFORM_ADMIN("platform", "Administração da plataforma (multiescritório)"),
 
     PORTAL_ACCESS("portal", "Acesso ao portal do cliente");

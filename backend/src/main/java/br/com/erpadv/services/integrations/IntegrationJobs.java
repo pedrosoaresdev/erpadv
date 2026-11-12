@@ -28,6 +28,12 @@ public class IntegrationJobs {
     private final JobLock lock;
     @org.springframework.beans.factory.annotation.Autowired
     private br.com.erpadv.services.CommunicationService communications;
+    /**
+     * Consultas automáticas aos tribunais (DJEN e DataJud). Desligadas por padrão: o acompanhamento processual é feito pelo
+     * advogado; para religar, defina INTEGRATIONS_JUDICIAL_SYNC=true.
+     */
+    @org.springframework.beans.factory.annotation.Value("${app.integrations.judicial-sync-enabled:false}")
+    private boolean judicialSync;
 
     public IntegrationJobs(OfficeRepository offices, IntegrationService integrations, PublicationService publications, DataJudService dataJud,
                            JobLock lock) {
@@ -40,7 +46,7 @@ public class IntegrationJobs {
 
     @Scheduled(cron = "${app.jobs.djen-cron:0 30 6,13 * * *}", zone = "America/Sao_Paulo")
     public void djenJob() {
-        if (!lock.tryAcquire("djen-sync", Duration.ofMinutes(50))) {
+        if (!judicialSync || !lock.tryAcquire("djen-sync", Duration.ofMinutes(50))) {
             return;
         }
         try {
@@ -82,7 +88,7 @@ public class IntegrationJobs {
 
     @Scheduled(cron = "${app.jobs.datajud-cron:0 0 3 * * *}", zone = "America/Sao_Paulo")
     public void dataJudJob() {
-        if (!lock.tryAcquire("datajud-sync", Duration.ofHours(3))) {
+        if (!judicialSync || !lock.tryAcquire("datajud-sync", Duration.ofHours(3))) {
             return;
         }
         try {

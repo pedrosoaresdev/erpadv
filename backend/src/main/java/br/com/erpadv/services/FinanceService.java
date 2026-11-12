@@ -166,6 +166,7 @@ public class FinanceService {
 
     public TransactionResponse update(AuthenticatedUser user, String id, TransactionRequest req) {
         FinancialTransaction t = load(user, id);
+        Map<String, Object> auditBefore = audit.snapshot(t);
         if (t.getStatus() != TransactionStatus.ABERTO) {
             throw new BusinessException("TRANSACTION_CLOSED", "Reabra o lançamento para editá-lo.");
         }
@@ -179,8 +180,8 @@ public class FinanceService {
         t.setDueDate(req.dueDate());
         touch(user, t);
         transactions.save(user.officeId(), t);
-        audit.record(user, "FINANCE_UPDATED", "finance", id, "Lançamento atualizado: " + t.getDescription(),
-                Map.of("amount", money(previousAmount) + "->" + money(t.getAmountCents())));
+        audit.recordChange(user, "FINANCE_UPDATED", "finance", id, "Lançamento atualizado: " + t.getDescription(),
+                Map.of("amount", money(previousAmount) + "->" + money(t.getAmountCents())), auditBefore, t);
         refreshClientDefaulting(user.officeId(), previousClient, t.getScope());
         refreshClientDefaulting(user.officeId(), t.getClientId(), t.getScope());
         return TransactionResponse.of(t, today());

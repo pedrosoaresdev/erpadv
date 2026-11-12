@@ -107,6 +107,11 @@ class SecurityIntegrationTest {
     br.com.erpadv.services.integrations.IntegrationService integrationService;
     @MockitoBean
     br.com.erpadv.services.CommunicationService communicationService;
+    // a sessão controlada pelo servidor (2FA, expiração) é coberta pelo SecurityEndToEndTest contra o emulador
+    @MockitoBean
+    br.com.erpadv.services.security.SessionService sessionService;
+    @MockitoBean
+    br.com.erpadv.services.security.SecurityPolicyService securityPolicyService;
 
     private void token(String token, String uid, String officeId, Role role, long iatSeconds) throws Exception {
         FirebaseToken decoded = mock(FirebaseToken.class);

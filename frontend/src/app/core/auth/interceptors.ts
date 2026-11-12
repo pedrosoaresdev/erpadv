@@ -6,6 +6,8 @@ import { SILENT_ERRORS } from '../api/api.service';
 import { ApiProblem } from '../models/models';
 import { ToastService } from '../services/toast.service';
 import { AuthService } from './auth.service';
+import { Router } from '@angular/router';
+import { JUSTIFICATION_CANCELLED } from './justification.interceptor';
 
 /** Anexa o ID token do Firebase às chamadas da API (somente para a própria API). */
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
@@ -19,15 +21,25 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   );
 };
 
-const SESSION_CODES = new Set(['INVALID_TOKEN', 'SESSION_REVOKED', 'PROFILE_MISMATCH', 'UNAUTHENTICATED', 'ACCOUNT_BLOCKED']);
+const SESSION_CODES = new Set(['INVALID_TOKEN', 'SESSION_REVOKED', 'SESSION_EXPIRED', 'PROFILE_MISMATCH', 'UNAUTHENTICATED', 'ACCOUNT_BLOCKED']);
+const MFA_CODES = new Set(['MFA_REQUIRED', 'MFA_ENROLLMENT_REQUIRED']);
 
 /** Padroniza erros (problem+json), exibe mensagens e encerra sessões inválidas. */
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
   const auth = inject(AuthService);
+  const router = inject(Router);
   return next(req).pipe(
     catchError((error: HttpErrorResponse) => {
       const problem = toProblem(error);
+      if (problem.code === JUSTIFICATION_CANCELLED) {
+        return throwError(() => problem);
+      }
+      if (MFA_CODES.has(problem.code) && auth.user()) {
+        // Segundo fator pendente nesta sessão: leva à confirmação, sem mensagem de erro.
+        void auth.loadSecurity().then(() => router.navigateByUrl('/verificacao-2fa'));
+        return throwError(() => problem);
+      }
       if (SESSION_CODES.has(problem.code) && auth.user()) {
         toast.error(problem.detail);
         void auth.logout();

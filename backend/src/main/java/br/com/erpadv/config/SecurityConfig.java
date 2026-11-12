@@ -41,8 +41,9 @@ public class SecurityConfig {
     public FirebaseAuthenticationFilter firebaseAuthenticationFilter(FirebaseAuth auth, UserProfileCache cache,
                                                                      PermissionResolver resolver,
                                                                      OfficeStatusCache officeStatus,
-                                                                     ProblemFactory problems, AppProperties properties) {
-        return new FirebaseAuthenticationFilter(auth, cache, resolver, officeStatus, problems, properties);
+                                                                     ProblemFactory problems, AppProperties properties,
+                                                                     br.com.erpadv.services.security.SessionService sessions) {
+        return new FirebaseAuthenticationFilter(auth, cache, resolver, officeStatus, problems, properties, sessions);
     }
 
     @Bean
@@ -92,6 +93,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // Webhooks e retorno OAuth: autenticados por assinatura/segredo/estado assinado, não por token de usuário.
                         .requestMatchers("/api/hooks/**").permitAll()
+                        // Política de privacidade vigente do escritório (LGPD): pública por natureza.
+                        .requestMatchers(HttpMethod.GET, "/api/public/**").permitAll()
                         .requestMatchers("/api/auth/**", "/api/onboarding/**").authenticated()
                         .requestMatchers("/api/platform/**").hasAuthority(Permission.PLATFORM_ADMIN.authority())
                         .requestMatchers("/api/portal/**").hasAuthority(Permission.PORTAL_ACCESS.authority())
@@ -110,7 +113,7 @@ public class SecurityConfig {
                 : List.of();
         config.setAllowedOrigins(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-Id"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-Id", "X-Audit-Justification"));
         config.setExposedHeaders(List.of("X-Request-Id", "Content-Disposition"));
         config.setAllowCredentials(false);
         config.setMaxAge(3600L);

@@ -87,6 +87,24 @@
             <artifactId>poi-ooxml</artifactId>
             <version>${poi.version}</version>
         </dependency>
+        <!-- IA jurídica: SDK oficial da Anthropic (Claude), chamado somente pelo backend -->
+        <dependency>
+            <groupId>com.anthropic</groupId>
+            <artifactId>anthropic-java</artifactId>
+            <version>3.2.0</version>
+        </dependency>
+        <!-- QR code do autenticador (2FA) -->
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>3.5.3</version>
+        </dependency>
+        <!-- Extração de texto e renderização de páginas de PDF (OCR e IA) -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.2</version>
+        </dependency>
 
         <!-- Logs estruturados em JSON -->
         <dependency>

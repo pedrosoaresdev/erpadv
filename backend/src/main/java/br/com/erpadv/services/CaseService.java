@@ -138,6 +138,7 @@ public class CaseService {
     public CaseResponse update(AuthenticatedUser user, String id, CaseRequest req) {
         String officeId = user.requireOffice();
         LegalCase legalCase = load(user, id);
+        Map<String, Object> auditBefore = audit.snapshot(legalCase);
         if (legalCase.isArchived()) {
             throw new BusinessException("CASE_ARCHIVED", "Processo arquivado. Desarquive para editar.");
         }
@@ -165,7 +166,8 @@ public class CaseService {
             systemMovement(user, legalCase, "Responsável alterado",
                     previousResponsible + " → " + legalCase.getResponsibleName());
         }
-        audit.record(user, "CASE_UPDATED", "case", id, "Processo atualizado");
+        audit.recordChange(user, "CASE_UPDATED", "case", id, "Processo atualizado",
+                Map.of(), auditBefore, legalCase);
         if (!legalCase.getResponsibleUid().equals(previousResponsibleUid)) {
             notifyResponsible(user, legalCase);
         }

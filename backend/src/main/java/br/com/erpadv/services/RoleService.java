@@ -102,6 +102,7 @@ public class RoleService {
     public CustomRoleResponse update(AuthenticatedUser actor, String id, CustomRoleRequest req) {
         String officeId = actor.requireOffice();
         CustomRole role = roles.findById(officeId, id).orElseThrow(() -> new NotFoundException("Cargo"));
+        Map<String, Object> auditBefore = audit.snapshot(role);
         validate(actor, req);
         assertUniqueName(officeId, req.name(), id);
         Role previousBase = role.getBaseRole();
@@ -132,11 +133,11 @@ public class RoleService {
             }
             profileCache.evict(member.getId());
         }
-        audit.record(actor, "ROLE_UPDATED", "role", id, "Cargo atualizado: " + role.getName(),
+        audit.recordChange(actor, "ROLE_UPDATED", "role", id, "Cargo atualizado: " + role.getName(),
                 Map.of("name", previousName + "->" + role.getName(),
                         "baseRole", previousBase + "->" + role.getBaseRole(),
                         "permissions", previousPermissions + "->" + role.getPermissions(),
-                        "members", String.valueOf(members.size())));
+                        "members", String.valueOf(members.size())), auditBefore, role);
         return response(role, members.size());
     }
 

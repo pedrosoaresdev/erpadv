@@ -360,28 +360,6 @@ const TX_STATUS: Record<string, string> = { ABERTO: 'Em aberto', PAGO: 'Pago', C
             </section>
           </mat-tab>
 
-          <!-- 12. Integrações judiciais -->
-          <mat-tab label="Integrações judiciais">
-            <section class="card card-pad tab-card">
-              <div class="card-title"><mat-icon>account_balance</mat-icon>Central Judicial</div>
-              <p>Consulta pela <strong>API Pública do DataJud (CNJ)</strong>, a interface oficial de consulta processual: dados do
-                processo e movimentações de todos os tribunais. Processos em segredo de justiça não são expostos pela API.</p>
-              <dl>
-                <dt>Número CNJ</dt><dd class="mono">{{ p.cnjNumber || 'não informado — necessário para a sincronização' }}</dd>
-                <dt>Tribunal</dt><dd>{{ p.court || '—' }}</dd>
-                <dt>Última sincronização</dt>
-                <dd>@if (p.integrationSyncedAt) { {{ p.integrationSyncedAt | brDate: true }} · {{ syncLabel(p.integrationStatus) }} } @else { nunca sincronizado }</dd>
-                @if (p.integrationError) { <dt>Erro</dt><dd class="danger">{{ p.integrationError }}</dd> }
-                <dt>Movimentações importadas</dt><dd>{{ importedCount() }}</dd>
-              </dl>
-              @if (auth.has('CASES_WRITE') && p.cnjNumber) {
-                <button mat-flat-button (click)="syncDataJud()" [disabled]="syncing()"><mat-icon>sync</mat-icon>{{ syncing() ? 'Consultando…' : 'Sincronizar com o DataJud' }}</button>
-              }
-              <p class="muted small">Movimentações importadas entram em "Movimentações" com a origem DataJud e não alteram a situação
-                do processo automaticamente. Publicações do DJEN ficam na Central Judicial. Nenhum sistema é acessado por captura de tela
-                ou com senhas judiciais.</p>
-            </section>
-          </mat-tab>
         </mat-tab-group>
       }
     </div>
@@ -459,29 +437,8 @@ export class CaseDetailComponent {
 
   readonly importantMovements = computed(() => this.movements().filter((m) => m.important));
   readonly visibleMovements = computed(() => (this.onlyImportant() ? this.importantMovements() : this.movements()));
-  readonly importedCount = computed(() => this.movements().filter((m) => m.source === 'INTEGRACAO' || m.source === 'DATAJUD').length);
-  readonly syncing = signal(false);
   private readonly api = inject(ApiService);
 
-  syncLabel(status: string | null | undefined): string {
-    return status === 'OK' ? 'sincronizado' : status === 'NAO_ENCONTRADO' ? 'não encontrado no DataJud' : status === 'ERRO' ? 'erro' : '—';
-  }
-
-  /** Consulta oficial do CNJ (DataJud): importa movimentações novas e completa dados vazios. */
-  syncDataJud(): void {
-    const c = this.legalCase();
-    if (!c) return;
-    this.syncing.set(true);
-    this.api.post<{ status: string; newMovements: number; message: string }>(`/integrations/datajud/cases/${encodeURIComponent(c.id)}`).subscribe({
-      next: (r) => {
-        this.syncing.set(false);
-        if (r.status === 'ERRO') this.toast.error(r.message); else this.toast.success(r.message);
-        this.service.get(c.id).subscribe((x) => this.legalCase.set(x));
-        this.loadMovements(false);
-      },
-      error: () => this.syncing.set(false),
-    });
-  }
   readonly pendingDeadlines = computed(() => (this.related()?.deadlines ?? []).filter((d) => d.status === 'PENDENTE'));
   readonly nextDeadline = computed(() => [...this.pendingDeadlines()].sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] ?? null);
   readonly nextHearing = computed(() => {

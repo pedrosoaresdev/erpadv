@@ -67,7 +67,8 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler({AccessDeniedException.class, AuthorizationDeniedException.class})
-    public ProblemDetail handleDenied(Exception ex) {
+    public ProblemDetail handleDenied(Exception ex, jakarta.servlet.http.HttpServletRequest request) {
+        recordDenied(request);
         return problems.create(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "Você não tem permissão para esta operação.");
     }
 
@@ -86,5 +87,33 @@ public class GlobalExceptionHandler {
         log.error("Erro inesperado", ex);
         return problems.create(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR",
                 "Erro interno. Informe o código de rastreio ao suporte.");
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private br.com.erpadv.services.security.SecurityEventService securityEvents;
+    private final java.util.Map<String, Long> deniedThrottle = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Acesso negado vira evento de segurança (no máximo um por usuário e rota a cada 10 minutos). */
+    private void recordDenied(jakarta.servlet.http.HttpServletRequest request) {
+        if (securityEvents == null) {
+            return;
+        }
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof br.com.erpadv.security.AuthenticatedUser user) || !user.hasOffice()) {
+            return;
+        }
+        String route = request.getMethod() + " " + request.getRequestURI().replaceAll("/[A-Za-z0-9_-]{16,}", "/{id}");
+        String key = user.uid() + "|" + route;
+        long now = System.currentTimeMillis();
+        Long last = deniedThrottle.get(key);
+        if (last != null && now - last < 600_000) {
+            return;
+        }
+        deniedThrottle.put(key, now);
+        if (deniedThrottle.size() > 10_000) {
+            deniedThrottle.clear();
+        }
+        securityEvents.record(user.officeId(), "ACCESS_DENIED", br.com.erpadv.models.SecurityEvent.Severity.ATENCAO,
+                "Acesso negado a " + user.displayName() + ": " + route, user.uid(), user.displayName(), java.util.Map.of("route", route));
     }
 }

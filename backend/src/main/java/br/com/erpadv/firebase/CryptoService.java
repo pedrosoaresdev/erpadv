@@ -91,6 +91,39 @@ public class CryptoService {
         }
     }
 
+    private static final byte[] BYTES_MAGIC = {'E', 'R', 'P', '1'};
+
+    /** Cifra um arquivo inteiro (AES-256-GCM): "ERP1" + IV + texto cifrado com tag. */
+    public byte[] encryptBytes(byte[] plain) {
+        try {
+            byte[] iv = new byte[IV_BYTES];
+            random.nextBytes(iv);
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.ENCRYPT_MODE, encryptionKey, new GCMParameterSpec(TAG_BITS, iv));
+            cipher.updateAAD(BYTES_MAGIC);
+            byte[] cipherText = cipher.doFinal(plain);
+            return ByteBuffer.allocate(BYTES_MAGIC.length + iv.length + cipherText.length).put(BYTES_MAGIC).put(iv).put(cipherText).array();
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Falha ao criptografar arquivo.", e);
+        }
+    }
+
+    public byte[] decryptBytes(byte[] data) {
+        if (data == null || data.length < BYTES_MAGIC.length + IV_BYTES
+                || !java.util.Arrays.equals(java.util.Arrays.copyOf(data, BYTES_MAGIC.length), BYTES_MAGIC)) {
+            throw new IllegalStateException("Arquivo cifrado em formato desconhecido.");
+        }
+        try {
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.DECRYPT_MODE, encryptionKey, new GCMParameterSpec(TAG_BITS, data, BYTES_MAGIC.length, IV_BYTES));
+            cipher.updateAAD(BYTES_MAGIC);
+            int offset = BYTES_MAGIC.length + IV_BYTES;
+            return cipher.doFinal(data, offset, data.length - offset);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Falha ao descriptografar arquivo (chave diferente ou arquivo alterado).", e);
+        }
+    }
+
     /** HMAC determinístico (base64url, sem padding) — usado como token de busca exata. */
     public String hmac(String value) {
         try {

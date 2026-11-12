@@ -253,4 +253,16 @@ public class DocumentController {
             throw new BusinessException("UPLOAD_FAILED", "Não foi possível ler o arquivo enviado.");
         }
     }
+
+    @GetMapping("/{id}/text")
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_READ')")
+    public br.com.erpadv.services.OcrService.TextView text(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
+        return documents.text(user, id);
+    }
+
+    @PostMapping("/{id}/ocr")
+    @PreAuthorize("hasAuthority('PERM_DOCUMENTS_WRITE')")
+    public br.com.erpadv.services.OcrService.TextView ocr(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable String id) {
+        return documents.reprocess(user, id);
+    }
 }

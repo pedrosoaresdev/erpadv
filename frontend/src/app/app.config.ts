@@ -16,6 +16,7 @@ import { provideRouter, withComponentInputBinding, withInMemoryScrolling } from 
 import { routes } from './app.routes';
 import { authInterceptor, errorInterceptor } from './core/auth/interceptors';
 import { ConfigService } from './core/config/config.service';
+import { justificationInterceptor } from './core/auth/justification.interceptor';
 import { FirebaseService } from './core/config/firebase.service';
 
 registerLocaleData(localePt);
@@ -34,7 +35,7 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes, withComponentInputBinding(), withInMemoryScrolling({ scrollPositionRestoration: 'top' })),
-    provideHttpClient(withInterceptors([authInterceptor, errorInterceptor])),
+    provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, justificationInterceptor])),
     provideAnimationsAsync(),
     provideAppInitializer(bootstrap),
     { provide: LOCALE_ID, useValue: 'pt-BR' },

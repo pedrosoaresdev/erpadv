@@ -40,4 +40,16 @@ public class UserProfile extends BaseEntity {
     private String blockedReason;
     /** Tokens emitidos antes deste instante são rejeitados (revogação de sessões). */
     private Instant tokensRevokedAt;
+    // ---- autenticação em dois fatores (TOTP, RFC 6238)
+    private boolean mfaEnabled;
+    /** Segredo TOTP cifrado (AES-256-GCM); pendente até a primeira confirmação. */
+    private String mfaSecretEnc;
+    private String mfaPendingSecretEnc;
+    private Instant mfaEnabledAt;
+    /** HMAC dos códigos de recuperação ainda não usados. */
+    private java.util.List<String> mfaRecoveryHashes = new java.util.ArrayList<>();
+    /** Último passo de 30 s aceito (impede reutilizar o mesmo código). */
+    private long mfaLastStep;
+    private int mfaFailedAttempts;
+    private Instant mfaLockedUntil;
 }

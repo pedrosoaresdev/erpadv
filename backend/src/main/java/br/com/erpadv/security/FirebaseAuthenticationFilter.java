@@ -48,10 +48,19 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
     private final OfficeStatusCache officeStatus;
     private final ProblemFactory problems;
     private final AppProperties properties;
+    private final br.com.erpadv.services.security.SessionService sessions;
 
     public FirebaseAuthenticationFilter(FirebaseAuth firebaseAuth, UserProfileCache profiles,
                                         PermissionResolver permissionResolver, OfficeStatusCache officeStatus,
                                         ProblemFactory problems, AppProperties properties) {
+        this(firebaseAuth, profiles, permissionResolver, officeStatus, problems, properties, null);
+    }
+
+    public FirebaseAuthenticationFilter(FirebaseAuth firebaseAuth, UserProfileCache profiles,
+                                        PermissionResolver permissionResolver, OfficeStatusCache officeStatus,
+                                        ProblemFactory problems, AppProperties properties,
+                                        br.com.erpadv.services.security.SessionService sessions) {
+        this.sessions = sessions;
         this.firebaseAuth = firebaseAuth;
         this.profiles = profiles;
         this.permissionResolver = permissionResolver;
@@ -85,6 +94,7 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
         Set<Permission> permissions = Set.of();
         String displayName = token.getName();
         boolean master = isPlatformMaster(token);
+        UserProfile activeProfile = null;
 
         if (officeId != null && role != null) {
             Optional<UserProfile> profileOpt = profiles.get(token.getUid());
@@ -94,6 +104,7 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
             UserProfile profile = profileOpt.get();
+            activeProfile = profile;
             if (profile.getStatus() == UserStatus.BLOCKED) {
                 problems.write(response, HttpStatus.FORBIDDEN, "ACCOUNT_BLOCKED", "Conta bloqueada. Procure o administrador.");
                 return;
@@ -142,6 +153,29 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
             }
         } else {
             authorities.add(new SimpleGrantedAuthority(AUTHORITY_PENDING));
+        }
+
+        // Sessão controlada pelo servidor: encerramento remoto, expiração, inatividade e segundo fator.
+        if (sessions != null && activeProfile != null && role != null && role.isStaff() && role != Role.MASTER) {
+            long authTime = claims.get("auth_time") instanceof Number n ? n.longValue()
+                    : claims.get("iat") instanceof Number n2 ? n2.longValue() : 0L;
+            request.setAttribute(br.com.erpadv.services.security.SessionService.ATTR_SESSION,
+                    br.com.erpadv.services.security.SessionService.sessionId(user.uid(), authTime));
+            request.setAttribute(br.com.erpadv.services.security.SessionService.ATTR_AUTH_TIME, authTime);
+            br.com.erpadv.services.security.SessionService.Decision decision;
+            try {
+                decision = sessions.check(officeId, user.uid(), user.displayName(), user.email(), role, permissions,
+                        activeProfile, authTime, request.getRequestURI());
+            } catch (RuntimeException e) {
+                log.error("Falha ao verificar a sessão de {}", user.uid(), e);
+                problems.write(response, HttpStatus.SERVICE_UNAVAILABLE, "SESSION_CHECK_UNAVAILABLE",
+                        "Não foi possível validar a sessão agora. Tente novamente em instantes.");
+                return;
+            }
+            if (decision != null) {
+                problems.write(response, decision.status(), decision.code(), decision.message());
+                return;
+            }
         }
 
         var authentication = new UsernamePasswordAuthenticationToken(user, null, authorities);

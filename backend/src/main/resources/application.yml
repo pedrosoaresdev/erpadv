@@ -87,7 +87,20 @@ app:
     appointment-reminders-ms: ${APPOINTMENT_REMINDERS_MS:300000}
   mail:
     from: ${MAIL_FROM:}
+  # OCR de documentos digitalizados (Tesseract instalado na imagem do backend)
+  ocr:
+    tesseract-path: ${OCR_TESSERACT_PATH:tesseract}
+    languages: ${OCR_LANGUAGES:por}
+  # IA jurídica (Anthropic/Claude) — chave só no backend; o escritório também pode cadastrar a própria em Integrações.
+  ai:
+    api-key: ${ANTHROPIC_API_KEY:}
+    model: ${ANTHROPIC_MODEL:claude-opus-5-5}
+    base-url: ${AI_BASE_URL:}
+    # "default": se o modelo recusar por política de segurança, a API tenta outro modelo na mesma chamada; "off" desliga.
+    fallbacks: ${AI_FALLBACKS:default}
   integrations:
+    # Consultas automáticas ao DJEN/DataJud (desligadas: o acompanhamento é feito pelo advogado).
+    judicial-sync-enabled: ${INTEGRATIONS_JUDICIAL_SYNC:false}
     # URL pública do sistema (retorno do OAuth do Google).
     public-app-url: ${PUBLIC_APP_URL:https://localhost:8443}
     datajud:

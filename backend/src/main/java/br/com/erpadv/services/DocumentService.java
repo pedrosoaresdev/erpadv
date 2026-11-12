@@ -369,6 +369,7 @@ public class DocumentService {
         documents.save(officeId, d);
         versions.save(officeId, v);
         log(user, d, "UPLOAD");
+        readContent(officeId, d, bytes);
         audit.record(user, "DOCUMENT_UPLOADED", "document", d.getId(), d.getCategory().label() + ": " + d.getTitle(),
                 Map.of("sha256", file.sha256(), "size", String.valueOf(file.size()), "confidential", String.valueOf(d.isConfidential())));
         return d;
@@ -388,6 +389,7 @@ public class DocumentService {
         documents.save(user.officeId(), d);
         versions.save(user.officeId(), v);
         log(user, d, "NEW_VERSION");
+        readContent(user.officeId(), d, bytes);
         audit.record(user, "DOCUMENT_VERSION_ADDED", "document", id, "Versão " + next + " de " + d.getTitle(),
                 Map.of("sha256", file.sha256()));
         return DocumentResponse.of(d);
@@ -395,12 +397,14 @@ public class DocumentService {
 
     public DocumentResponse update(AuthenticatedUser user, String id, DocumentMeta meta) {
         StoredDocument d = load(user, id);
+        Map<String, Object> auditBefore = audit.snapshot(d);
         applyMeta(user, d, meta);
         d.setUpdatedAt(Instant.now());
         d.setUpdatedBy(user.uid());
         documents.save(user.officeId(), d);
         log(user, d, "UPDATE");
-        audit.record(user, "DOCUMENT_UPDATED", "document", id, "Metadados atualizados: " + d.getTitle());
+        audit.recordChange(user, "DOCUMENT_UPDATED", "document", id, "Metadados atualizados: " + d.getTitle(),
+                Map.of(), auditBefore, d);
         return DocumentResponse.of(d);
     }
 
@@ -541,16 +545,7 @@ public class DocumentService {
             d.setTags(meta.tags().stream().filter(DocumentService::notBlank).map(t -> t.trim().toLowerCase(java.util.Locale.ROOT))
                     .distinct().limit(10).toList());
         }
-        Set<String> tokens = new LinkedHashSet<>(SearchTokens.forText(d.getTitle()));
-        tokens.addAll(SearchTokens.forText(d.getDescription()));
-        tokens.addAll(SearchTokens.forText(d.getClientName()));
-        if (d.getTags() != null) {
-            d.getTags().forEach(t -> tokens.addAll(SearchTokens.forText(t)));
-        }
-        if (d.getCaseNumber() != null) {
-            tokens.add("c:" + d.getCaseNumber().replaceAll("\\D", ""));
-        }
-        d.setSearchTokens(tokens.stream().limit(300).toList());
+        rebuildTokens(d);
     }
 
     private DocumentAccessLog log(AuthenticatedUser user, StoredDocument d, String action) {
@@ -577,5 +572,55 @@ public class DocumentService {
 
     private static boolean notBlank(String v) {
         return v != null && !v.isBlank();
+    }
+
+    /** Termos de busca: título, descrição, cliente, etiquetas, número do processo e palavras do conteúdo (texto/OCR). */
+    static void rebuildTokens(StoredDocument d) {
+        Set<String> tokens = new LinkedHashSet<>(SearchTokens.forText(d.getTitle()));
+        tokens.addAll(SearchTokens.forText(d.getDescription()));
+        tokens.addAll(SearchTokens.forText(d.getClientName()));
+        if (d.getTags() != null) {
+            d.getTags().forEach(t -> tokens.addAll(SearchTokens.forText(t)));
+        }
+        if (d.getCaseNumber() != null) {
+            tokens.add("c:" + d.getCaseNumber().replaceAll("\\D", ""));
+        }
+        List<String> base = tokens.stream().limit(300).toList();
+        Set<String> all = new LinkedHashSet<>(base);
+        if (d.getContentTokens() != null) {
+            all.addAll(d.getContentTokens());
+        }
+        d.setSearchTokens(all.stream().limit(700).toList());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private OcrService ocr;
+
+    /** Texto do arquivo para busca e IA (OCR em segundo plano quando digitalizado); nunca impede o envio. */
+    private void readContent(String officeId, StoredDocument d, byte[] bytes) {
+        if (ocr == null) {
+            return;
+        }
+        try {
+            ocr.process(officeId, d, bytes);
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(DocumentService.class).warn("Leitura do conteúdo falhou para {}", d.getId(), e);
+        }
+    }
+
+    /** Texto extraído do documento (com as mesmas permissões de leitura do arquivo). */
+    public OcrService.TextView text(AuthenticatedUser user, String id) {
+        StoredDocument d = load(user, id);
+        log(user, d, "VIEW_TEXT");
+        return ocr.view(user.officeId(), d);
+    }
+
+    /** Reprocessa a leitura do conteúdo da versão atual (ex.: depois de instalar o OCR no servidor). */
+    public OcrService.TextView reprocess(AuthenticatedUser user, String id) {
+        StoredDocument d = load(user, id);
+        byte[] bytes = content(user, id, null, false).bytes();
+        ocr.process(user.officeId(), d, bytes);
+        audit.record(user, "DOCUMENT_OCR_REQUESTED", "document", id, "Leitura do conteúdo reprocessada: " + d.getTitle());
+        return ocr.view(user.officeId(), load(user, id));
     }
 }

@@ -31,7 +31,7 @@ describe('guards e interceptors de autenticação', () => {
     ready: () => Promise.resolve(),
     loadMe: () => Promise.resolve(current()),
     has: (p: Permission) => current()?.permissions.includes(p) ?? false,
-    homePath: (m: Me | null) => (AuthService.prototype.homePath as (m: Me | null) => string).call({}, m),
+    homePath: (m: Me | null) => (AuthService.prototype.homePath as (m: Me | null) => string).call({ mfaPending: () => false }, m),
   };
 
   beforeEach(() => {

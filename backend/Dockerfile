@@ -8,7 +8,9 @@ RUN mvn -B -q package -DskipTests
 
 # ---------------------------------------------------------------- runtime
 FROM eclipse-temurin:21-jre-alpine
-RUN addgroup -S app && adduser -S app -G app && apk add --no-cache wget
+# tesseract + dados do português: OCR de documentos digitalizados no próprio servidor (nada sai do escritório);
+# fontconfig/ttf-dejavu: renderização das páginas de PDF pelo PDFBox
+RUN addgroup -S app && adduser -S app -G app     && apk add --no-cache wget tesseract-ocr tesseract-ocr-data-por fontconfig ttf-dejavu
 WORKDIR /app
 COPY --from=build /app/target/erpadv-backend.jar app.jar
 USER app

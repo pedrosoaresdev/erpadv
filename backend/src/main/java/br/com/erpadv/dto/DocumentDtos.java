@@ -73,7 +73,8 @@ public final class DocumentDtos {
             boolean favorite,
             boolean deleted,
             Instant deletedAt,
-            String deletedByName) {
+            String deletedByName,
+            String ocrStatus) {
 
         public static DocumentResponse of(StoredDocument d) {
             return of(d, null);
@@ -86,7 +87,7 @@ public final class DocumentDtos {
                     d.isSharedWithClient(), d.isArchived(), d.getCurrentVersion(), d.getFileName(), d.getContentType(),
                     d.getSize(), d.getSha256(), d.getUploadedByName(), d.getCreatedAt(), d.getUpdatedAt(), d.getFolderId(),
                     d.getTags(), uid != null && d.getFavoriteUids() != null && d.getFavoriteUids().contains(uid),
-                    d.isDeleted(), d.getDeletedAt(), d.getDeletedByName());
+                    d.isDeleted(), d.getDeletedAt(), d.getDeletedByName(), d.getOcrStatus());
         }
     }
 
