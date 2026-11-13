@@ -23,6 +23,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { Dashboard } from '../../core/models/models';
 import { DelinquencyReport, FinanceSummary } from '../finance/finance.models';
 import { FinanceService } from '../finance/finance.service';
+import { OfficeService, Onboarding } from '../settings/office.service';
 
 const BRL0 = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
 import { CHART_COLORS, ChartComponent } from '../../shared/components/chart';
@@ -59,6 +60,12 @@ const iso = (d: Date) =>
             @for (l of lawyers(); track l.uid) { <mat-option [value]="l.uid">{{ l.displayName }}</mat-option> }
           </mat-select>
         }
+        @if (units().length) {
+          <mat-select class="lawyer" [ngModel]="unit()" (ngModelChange)="setUnit($event)" aria-label="Filtrar por unidade" placeholder="Unidade">
+            <mat-option value="">Todas as unidades</mat-option>
+            @for (u of units(); track u.id) { <mat-option [value]="u.id">{{ u.name }}</mat-option> }
+          </mat-select>
+        }
         <button mat-icon-button (click)="load()" aria-label="Atualizar" matTooltip="Atualizar"><mat-icon>refresh</mat-icon></button>
         <button mat-stroked-button [matMenuTriggerFor]="exportMenu" [disabled]="exporting()"><mat-icon>download</mat-icon>Exportar</button>
         <mat-menu #exportMenu="matMenu" xPosition="before">
@@ -66,6 +73,28 @@ const iso = (d: Date) =>
           <button mat-menu-item (click)="export('xlsx')"><mat-icon>table_view</mat-icon>Excel</button>
         </mat-menu>
       </app-page-header>
+
+      @if (onboarding(); as ob) {
+        @if (!ob.dismissed && !ob.complete) {
+          <section class="card onboarding">
+            <div class="ob-head">
+              <div>
+                <strong>Primeiros passos no ERPAdv</strong>
+                <span class="muted small">{{ doneCount(ob) }} de {{ ob.steps.length }} concluídos</span>
+              </div>
+              <button mat-button (click)="dismissOnboarding()">Ocultar</button>
+            </div>
+            <div class="ob-bar"><span [style.width.%]="(doneCount(ob) / ob.steps.length) * 100"></span></div>
+            <div class="ob-steps">
+              @for (st of ob.steps; track st.key) {
+                <a class="ob-step" [class.done]="st.done" [routerLink]="st.link">
+                  <mat-icon>{{ st.done ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>{{ st.label }}
+                </a>
+              }
+            </div>
+          </section>
+        }
+      }
 
       <nav class="quick" aria-label="Atalhos">
         @if (auth.has('CLIENTS_WRITE')) { <button class="qa" (click)="newClient()"><mat-icon>person_add</mat-icon>Novo cliente</button> }
@@ -231,6 +260,17 @@ const iso = (d: Date) =>
     .pending-item mat-icon { font-size: 16px; width: 16px; height: 16px; color: var(--app-gold); }
     .charts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 8px; }
     .span-2 { grid-column: span 2; }
+    .onboarding { padding: 14px 18px; margin-bottom: 16px; }
+    .ob-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .ob-head div { display: flex; flex-direction: column; }
+    .ob-bar { height: 6px; border-radius: 4px; background: var(--app-border); margin: 10px 0; overflow: hidden; }
+    .ob-bar span { display: block; height: 100%; background: var(--app-gold); }
+    .ob-steps { display: flex; flex-wrap: wrap; gap: 8px; }
+    .ob-step { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--app-border); border-radius: 999px;
+      color: inherit; text-decoration: none; font-size: 13px; }
+    .ob-step mat-icon { font-size: 18px; width: 18px; height: 18px; }
+    .ob-step.done { opacity: .6; }
+    .ob-step.done mat-icon { color: var(--app-success, #2f855a); }
     .lawyer { width: 210px; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 10px; padding: 9px 12px; box-sizing: border-box; }
     .quick { display: flex; gap: 10px; flex-wrap: wrap; margin: -6px 0 18px; }
     .qa { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--app-border);
@@ -269,6 +309,10 @@ export class DashboardComponent {
   readonly lawyers = toSignal(this.api.get<EmployeeOption[]>('/employees/lawyers', undefined, true).pipe(catchError(() => of([]))),
     { initialValue: [] as EmployeeOption[] });
   readonly lawyer = signal('');
+  private readonly office = inject(OfficeService);
+  readonly units = this.office.unitOptions();
+  readonly unit = signal('');
+  readonly onboarding = signal<Onboarding | null>(null);
   readonly exporting = signal(false);
   readonly prevFinance = signal<FinanceSummary | null>(null);
   private range: { from: string; to: string } = { from: '', to: '' };
@@ -289,6 +333,19 @@ export class DashboardComponent {
     return total ? Math.round((t.deadlinesCompleted / total) * 100) : 100;
   }
 
+  setUnit(id: string): void {
+    this.unit.set(id);
+    this.load();
+  }
+
+  doneCount(ob: Onboarding): number {
+    return ob.steps.filter((x) => x.done).length;
+  }
+
+  dismissOnboarding(): void {
+    this.office.dismissOnboarding().subscribe((o) => this.onboarding.set(o));
+  }
+
   setLawyer(uid: string): void {
     this.lawyer.set(uid);
     this.load();
@@ -296,7 +353,7 @@ export class DashboardComponent {
 
   export(format: 'pdf' | 'xlsx'): void {
     this.exporting.set(true);
-    this.api.getBlob('/dashboard/export', { ...this.range, lawyerUid: this.lawyer() || null, format }).subscribe({
+    this.api.getBlob('/dashboard/export', { ...this.range, lawyerUid: this.lawyer() || null, unitId: this.unit() || null, format }).subscribe({
       next: (r) => { saveBlob(r, `dashboard.${format}`); this.exporting.set(false); },
       error: () => { this.exporting.set(false); this.toast.error('Não foi possível exportar o painel.'); },
     });
@@ -474,6 +531,7 @@ export class DashboardComponent {
 
   constructor() {
     this.load();
+    if (this.auth.has('SETTINGS_MANAGE')) this.office.onboarding().subscribe({ next: (o) => this.onboarding.set(o), error: () => this.onboarding.set(null) });
   }
 
   setPeriod(value: PeriodKey): void {
@@ -502,7 +560,7 @@ export class DashboardComponent {
       this.financeApi.dashboard(iso(prevFrom), iso(prevEnd)).subscribe({ next: (f) => this.prevFinance.set(f), error: () => this.prevFinance.set(null) });
       if (this.auth.has('FINANCE_READ')) this.financeApi.delinquency().subscribe((d) => this.delinquency.set(d));
     }
-    this.api.get<Dashboard>('/dashboard', { ...this.range, lawyerUid: this.lawyer() || null }).subscribe({
+    this.api.get<Dashboard>('/dashboard', { ...this.range, lawyerUid: this.lawyer() || null, unitId: this.unit() || null }).subscribe({
       next: (d) => { this.data.set(d); this.loading.set(false); },
       error: () => this.loading.set(false),
     });

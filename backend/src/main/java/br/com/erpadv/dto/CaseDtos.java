@@ -43,7 +43,8 @@ public final class CaseDtos {
             @Size(max = 160) String judgingBody,
             @Size(max = 10) java.util.List<@Size(max = 200) String> secondarySubjects,
             boolean freeJustice,
-            br.com.erpadv.models.CasePhase phase) {
+            br.com.erpadv.models.CasePhase phase,
+            @Size(max = 128) String unitId) {
     }
 
     public record CaseResponse(
@@ -85,7 +86,9 @@ public final class CaseDtos {
             LocalDate sentenceDate,
             LocalDate finalJudgmentDate,
             java.util.List<br.com.erpadv.models.ResponsibleChange> responsibleHistory,
-            Instant lastMovementAt) {
+            Instant lastMovementAt,
+            String unitId,
+            String unitName) {
 
         public static CaseResponse of(LegalCase c) {
             return new CaseResponse(c.getId(), c.getCnjNumber(), c.getClientId(), c.getClientName(),
@@ -97,7 +100,7 @@ public final class CaseDtos {
                     c.getCreatedAt(), c.getUpdatedAt(), c.getActiveParty(), c.getPassiveParty(), c.getInstance(),
                     c.getJudgingBody(), c.getSecondarySubjects(), c.getLawyerOab(), c.isFreeJustice(), c.getPhase(),
                     c.getPhase() == null ? null : c.getPhase().label(), c.getSentenceDate(), c.getFinalJudgmentDate(),
-                    c.getResponsibleHistory(), c.getLastMovementAt());
+                    c.getResponsibleHistory(), c.getLastMovementAt(), c.getUnitId(), c.getUnitName());
         }
     }
 
@@ -143,6 +146,7 @@ public final class CaseDtos {
             String responsibleUid,
             String court,
             String clientId,
-            boolean includeArchived) {
+            boolean includeArchived,
+            String unitId) {
     }
 }

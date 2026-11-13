@@ -85,6 +85,12 @@ app:
     enabled: ${JOBS_ENABLED:true}
     deadline-alerts-cron: ${DEADLINE_ALERTS_CRON:0 5 * * * *}
     appointment-reminders-ms: ${APPOINTMENT_REMINDERS_MS:300000}
+    # Cobrança das assinaturas: fim da avaliação, faturas, atrasos e suspensão (horário de Brasília)
+    billing-cron: ${BILLING_CRON:0 0 6 * * *}
+  # Avaliação gratuita dos novos escritórios (plano e dias)
+  billing:
+    trial-plan: ${BILLING_TRIAL_PLAN:ENTERPRISE}
+    trial-days: ${BILLING_TRIAL_DAYS:14}
   mail:
     from: ${MAIL_FROM:}
   # OCR de documentos digitalizados (Tesseract instalado na imagem do backend)

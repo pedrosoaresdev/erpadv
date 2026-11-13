@@ -58,4 +58,7 @@ public class LegalCase extends BaseEntity {
     /** Data da última movimentação registrada (para "aguardando movimentação"). */
     private Instant lastMovementAt;
     private List<String> searchTokens = new ArrayList<>();
+    /** Unidade/filial responsável (Fase 6). */
+    private String unitId;
+    private String unitName;
 }

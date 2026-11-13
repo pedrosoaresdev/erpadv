@@ -40,6 +40,19 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         void auth.loadSecurity().then(() => router.navigateByUrl('/verificacao-2fa'));
         return throwError(() => problem);
       }
+      if (problem.code === 'OFFICE_SUSPENDED_BILLING' && auth.user()) {
+        // Suspensão por cobrança: o administrador regulariza em Plano e Assinatura; os demais saem com o aviso.
+        if (auth.has('SETTINGS_MANAGE')) {
+          if (!router.url.startsWith('/plano')) {
+            toast.error(problem.detail);
+            void router.navigateByUrl('/plano');
+          }
+        } else {
+          toast.error('Acesso do escritório suspenso por falta de pagamento. Procure o administrador do escritório.');
+          void auth.logout();
+        }
+        return throwError(() => problem);
+      }
       if (SESSION_CODES.has(problem.code) && auth.user()) {
         toast.error(problem.detail);
         void auth.logout();

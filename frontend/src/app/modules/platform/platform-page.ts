@@ -6,10 +6,16 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatTabsModule } from '@angular/material/tabs';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog';
 import { EmptyStateComponent, PageHeaderComponent, StatCardComponent } from '../../shared/components/ui';
 import { BrDatePipe } from '../../shared/pipes/format.pipes';
+import {
+  PLATFORM_TABS, PlatformBillingSettingsComponent, PlatformInvoicesComponent, PlatformMonitoringComponent, PlatformPlansComponent,
+  PlatformSupportComponent, SubscriptionDialogComponent, platformTabIndex,
+} from './platform-billing';
 import { OfficeDetailDialogComponent, OfficeFormDialogComponent } from './platform-dialogs';
 import { OfficeSummary, OfficeUser, PLAN_LABELS, PlatformOverview, PlatformService } from './platform.service';
 
@@ -17,13 +23,16 @@ import { OfficeSummary, OfficeUser, PLAN_LABELS, PlatformOverview, PlatformServi
 @Component({
   selector: 'app-platform-page',
   imports: [FormsModule, MatButtonModule, MatButtonToggleModule, MatIconModule, MatMenuModule, MatProgressBarModule,
-    PageHeaderComponent, StatCardComponent, EmptyStateComponent, BrDatePipe],
+    PageHeaderComponent, StatCardComponent, EmptyStateComponent, BrDatePipe, MatTabsModule, PlatformInvoicesComponent, PlatformPlansComponent,
+    PlatformSupportComponent, PlatformMonitoringComponent, PlatformBillingSettingsComponent],
   template: `
     <div class="page">
-      <app-page-header eyebrow="Plataforma" title="Escritórios" subtitle="Crie escritórios, cadastre o advogado administrador e controle planos e acessos.">
+      <app-page-header eyebrow="Plataforma" title="Painel da plataforma" subtitle="Escritórios, assinaturas, faturas, planos, suporte e monitoramento.">
         <button mat-flat-button (click)="create()"><mat-icon>domain_add</mat-icon>Novo escritório</button>
       </app-page-header>
 
+      <mat-tab-group animationDuration="120ms" mat-stretch-tabs="false" [selectedIndex]="tab()" (selectedIndexChange)="onTab($event)">
+      <mat-tab label="Escritórios">
       @if (data(); as d) {
         <div class="stats">
           <app-stat-card label="Escritórios" [value]="d.stats.offices" icon="domain" [accent]="true" />
@@ -75,6 +84,8 @@ import { OfficeSummary, OfficeUser, PLAN_LABELS, PlatformOverview, PlatformServi
                       <mat-menu #menu="matMenu" xPosition="before">
                         <button mat-menu-item (click)="open(o)"><mat-icon>visibility</mat-icon>Detalhes e equipe</button>
                         <button mat-menu-item (click)="edit(o)"><mat-icon>edit</mat-icon>Editar dados e plano</button>
+                        <button mat-menu-item (click)="subscription(o)"><mat-icon>workspace_premium</mat-icon>Assinatura e cobrança</button>
+                        <button mat-menu-item (click)="issue(o)"><mat-icon>receipt</mat-icon>Emitir fatura agora</button>
                         @if (o.status === 'SUSPENDED') {
                           <button mat-menu-item (click)="reactivate(o)"><mat-icon>play_circle</mat-icon>Reativar</button>
                         } @else {
@@ -89,10 +100,18 @@ import { OfficeSummary, OfficeUser, PLAN_LABELS, PlatformOverview, PlatformServi
           </div>
         }
       </div>
+      </mat-tab>
+      <mat-tab label="Faturas"><ng-template matTabContent><div class="tab"><app-platform-invoices /></div></ng-template></mat-tab>
+      <mat-tab label="Planos"><ng-template matTabContent><div class="tab"><app-platform-plans /></div></ng-template></mat-tab>
+      <mat-tab label="Suporte"><ng-template matTabContent><div class="tab"><app-platform-support /></div></ng-template></mat-tab>
+      <mat-tab label="Monitoramento"><ng-template matTabContent><div class="tab"><app-platform-monitoring /></div></ng-template></mat-tab>
+      <mat-tab label="Dados de cobrança"><ng-template matTabContent><div class="tab"><app-platform-billing-settings /></div></ng-template></mat-tab>
+      </mat-tab-group>
     </div>
   `,
   styles: `
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .tab { padding-top: 16px; }
+    .stats { margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
     .toolbar { display: flex; gap: 12px; align-items: center; padding: 14px 16px; flex-wrap: wrap; border-bottom: 1px solid var(--app-border); }
     .search { flex: 1 1 280px; display: flex; align-items: center; gap: 8px; background: var(--app-surface-2); border: 1px solid var(--app-border); border-radius: 10px; padding: 0 12px; height: 40px; }
     .search input { border: 0; outline: 0; background: transparent; color: var(--app-text); flex: 1; font: inherit; }
@@ -116,6 +135,24 @@ export class PlatformPageComponent {
   readonly loading = signal(false);
   readonly term = signal('');
   readonly statusFilter = signal('');
+  private readonly router = inject(Router);
+  readonly tab = signal(platformTabIndex(inject(ActivatedRoute).snapshot.queryParamMap.get('aba')));
+
+  onTab(i: number): void {
+    this.tab.set(i);
+    void this.router.navigate([], { queryParams: { aba: PLATFORM_TABS[i] }, replaceUrl: true });
+  }
+
+  subscription(o: OfficeSummary): void {
+    this.dialog.open(SubscriptionDialogComponent, { data: { officeId: o.id, officeName: o.name }, width: '820px', maxWidth: '96vw' })
+      .afterClosed().subscribe((r) => {
+        if (r) { this.toast.success('Assinatura atualizada.'); this.load(); }
+      });
+  }
+
+  issue(o: OfficeSummary): void {
+    this.service.issueInvoice(o.id).subscribe((i) => this.toast.success(`Fatura ${i.number} emitida para ${o.name}.`));
+  }
 
   readonly filtered = computed(() => {
     const t = this.term().trim().toLowerCase();

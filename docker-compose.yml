@@ -45,6 +45,9 @@ services:
       SEARCH_HMAC_KEY: ${SEARCH_HMAC_KEY:-ZGV2LW9ubHktaG1hYy1rZXktY2hhbmdlLW1lLTMyYnl0ZXM=}
       REQUIRE_EMAIL_VERIFIED: ${REQUIRE_EMAIL_VERIFIED:-false}
       PLATFORM_MASTER_EMAILS: ${PLATFORM_MASTER_EMAILS:-}
+      BILLING_CRON: ${BILLING_CRON:-0 0 6 * * *}
+      BILLING_TRIAL_PLAN: ${BILLING_TRIAL_PLAN:-ENTERPRISE}
+      BILLING_TRIAL_DAYS: ${BILLING_TRIAL_DAYS:-14}
       DOCUMENTS_MAX_MB: ${DOCUMENTS_MAX_MB:-25}
       # E-mail de desenvolvimento: tudo cai no Mailpit (http://localhost:${MAILPIT_UI_PORT:-18025}), nada sai para a internet.
       SMTP_HOST: ${SMTP_HOST:-mailpit}

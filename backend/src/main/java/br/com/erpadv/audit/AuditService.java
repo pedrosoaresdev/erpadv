@@ -68,6 +68,13 @@ public class AuditService {
         record(actor, actor.officeId(), action, entityType, entityId, summary, details, changes);
     }
 
+    /** Alteração feita pela plataforma (ou rotina) registrada na auditoria do escritório afetado. */
+    public void recordChange(AuthenticatedUser actor, String officeId, String action, String entityType, String entityId, String summary,
+                             Map<String, String> details, Map<String, Object> before, Object after) {
+        List<AuditChange> changes = AuditDiff.diff(before, after == null ? null : snapshot(after));
+        record(actor, officeId, action, entityType, entityId, summary, details, changes);
+    }
+
     private void record(AuthenticatedUser actor, String officeId, String action, String entityType, String entityId,
                         String summary, Map<String, String> details, List<AuditChange> changes) {
         AuditLog entry = new AuditLog();

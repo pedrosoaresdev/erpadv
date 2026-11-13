@@ -99,7 +99,7 @@ public class SearchService {
                             c.documentMasked() + (c.phone() == null ? "" : " · " + c.phone()), "/clientes/" + c.id())).toList());
         }
         if (user.has(Permission.CASES_READ)) {
-            add(groups, "cases", "Processos", "gavel", () -> cases.list(user, new CaseFilter(term, null, null, null, null, null, true),
+            add(groups, "cases", "Processos", "gavel", () -> cases.list(user, new CaseFilter(term, null, null, null, null, null, true, null),
                     null, PER_GROUP).items().stream().map((CaseResponse c) -> new SearchHit(c.id(),
                     c.cnjNumber() == null ? "Processo não distribuído" : c.cnjNumber(),
                     c.clientName() + (c.opposingParty() == null ? "" : " x " + c.opposingParty()), "/processos/" + c.id())).toList());

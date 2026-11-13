@@ -94,7 +94,7 @@ public class ClientController {
         List<List<String>> rows = null;
         if (user.has(Permission.CASES_READ)) {
             rows = new ArrayList<>();
-            for (CaseResponse c : cases.list(user, new CaseFilter(null, null, null, null, null, id, true), null, 100).items()) {
+            for (CaseResponse c : cases.list(user, new CaseFilter(null, null, null, null, null, id, true, null), null, 100).items()) {
                 rows.add(List.of(c.cnjNumber() == null ? "Sem número" : c.cnjNumber(), c.areaLabel() == null ? "" : c.areaLabel(),
                         c.court() == null ? "" : c.court(), c.statusLabel() == null ? "" : c.statusLabel()));
             }
@@ -203,6 +203,6 @@ public class ClientController {
                                           @RequestParam(required = false) String cursor,
                                           @RequestParam(defaultValue = "20") int size) {
         clients.load(user, id);
-        return cases.list(user, new CaseFilter(null, null, null, null, null, id, true), cursor, size);
+        return cases.list(user, new CaseFilter(null, null, null, null, null, id, true, null), cursor, size);
     }
 }

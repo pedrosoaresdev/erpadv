@@ -20,6 +20,7 @@ export interface CaseFilter {
   area?: LegalArea | '';
   responsibleUid?: string;
   court?: string;
+  unitId?: string;
   includeArchived?: boolean;
 }
 

@@ -2,9 +2,13 @@
 <div class="shell" [class.collapsed]="collapsed() && !isMobile()" [class.mobile]="isMobile()" [class.mobile-open]="mobileOpen()">
   <aside class="sidebar" aria-label="Menu principal">
     <div class="brand">
+      @if (office.logoUrl(); as logo) {
+        <div class="logo custom" aria-hidden="true"><img [src]="logo" alt="" /></div>
+      } @else {
       <div class="logo" aria-hidden="true">
         <svg viewBox="0 0 64 64"><path d="M32 12v40M18 22h28M18 22l-7 14a7 7 0 0 0 14 0zM46 22l-7 14a7 7 0 0 0 14 0zM24 52h16" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
+      }
       <div class="brand-text">
         <span class="brand-name brand-serif">ERPAdv</span>
         <span class="brand-office">{{ auth.me()?.officeName }}</span>
@@ -101,6 +105,13 @@
       </mat-menu>
     </header>
 
+    @if (billingBanner(); as b) {
+      <div class="billing-banner" [class.danger]="b.tone === 'danger'" role="status">
+        <mat-icon>{{ b.tone === 'danger' ? 'warning' : 'hourglass_bottom' }}</mat-icon>
+        <span>{{ b.text }}</span>
+        <a routerLink="/plano">Ver plano e faturas</a>
+      </div>
+    }
     <main class="content" id="conteudo" tabindex="-1">
       <router-outlet />
     </main>

@@ -15,6 +15,7 @@ import { CasePhase, CaseRequest, CaseStatus, ClientSummary, LegalArea, LegalCase
 import { AREA_LABELS, CASE_STATUS_LABELS, INSTANCES, PHASE_LABELS, UF, enumOptions } from '../../shared/labels';
 import { centsToInput, cnjValidator, formatCnj, parseMoneyToCents } from '../../shared/validators/br-validators';
 import { ClientsService } from '../clients/clients.service';
+import { OfficeService } from '../settings/office.service';
 import { CasesService } from './cases.service';
 
 export interface CaseFormData {
@@ -142,6 +143,15 @@ interface ClientPick {
           </mat-select>
           @if (form.controls.responsibleUid.invalid) { <mat-error>Selecione o responsável</mat-error> }
         </mat-form-field>
+        @if (units().length) {
+          <mat-form-field appearance="outline" class="c4">
+            <mat-label>Unidade / filial</mat-label>
+            <mat-select formControlName="unitId">
+              <mat-option value="">Sem unidade</mat-option>
+              @for (u of units(); track u.id) { <mat-option [value]="u.id">{{ u.name }}</mat-option> }
+            </mat-select>
+          </mat-form-field>
+        }
         <mat-form-field appearance="outline" class="c4">
           <mat-label>Valor da causa (R$)</mat-label>
           <input matInput formControlName="claimValue" inputmode="decimal" placeholder="0,00" />
@@ -222,7 +232,9 @@ export class CaseFormDialogComponent {
     secondarySubjects: [(this.c?.secondarySubjects ?? []).join('; ')],
     freeJustice: [this.c?.freeJustice ?? false],
     phase: [(this.c?.phase ?? null) as CasePhase | null],
+    unitId: [this.c?.unitId ?? ''],
   });
+  readonly units = inject(OfficeService).unitOptions();
 
   constructor() {
     this.clientSearch.valueChanges
@@ -285,6 +297,7 @@ export class CaseFormDialogComponent {
       secondarySubjects: v.secondarySubjects.split(';').map((x) => x.trim()).filter(Boolean).slice(0, 10),
       freeJustice: v.freeJustice,
       phase: v.phase,
+      unitId: v.unitId || null,
     };
     this.saving.set(true);
     const request = this.c ? this.service.update(this.c.id, body) : this.service.create(body);

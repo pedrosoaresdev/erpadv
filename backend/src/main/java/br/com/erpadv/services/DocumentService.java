@@ -299,7 +299,9 @@ public class DocumentService {
             throw new BusinessException("CONTRACT_DOCUMENT", "Documento vinculado a contrato não pode ser eliminado.");
         }
         String officeId = user.officeId();
+        long freed = 0;
         for (DocumentVersion v : versions.list(versions.collection(officeId).whereEqualTo("documentId", id), 200)) {
+            freed += v.getSize();
             try {
                 storage.delete(v.getStoragePath());
             } catch (RuntimeException ignored) {
@@ -308,6 +310,9 @@ public class DocumentService {
             br.com.erpadv.firebase.Futures.await(versions.collection(officeId).document(v.getId()).delete());
         }
         br.com.erpadv.firebase.Futures.await(documents.collection(officeId).document(id).delete());
+        if (license != null && freed > 0) {
+            license.addStorage(officeId, -freed);
+        }
         audit.record(user, "DOCUMENT_PURGED", "document", id, "Documento eliminado definitivamente: " + d.getTitle(),
                 Map.of("reason", reason == null ? "" : reason, "sha256", d.getSha256() == null ? "" : d.getSha256(),
                         "versions", String.valueOf(d.getCurrentVersion())));
@@ -358,6 +363,9 @@ public class DocumentService {
     StoredDocument store(AuthenticatedUser user, DocumentMeta meta, byte[] bytes, String originalName, String contractId) {
         String officeId = user.requireOffice();
         FileInspector.Inspection file = FileInspector.inspect(bytes, originalName, maxBytes, ALLOWED);
+        if (license != null) {
+            license.assertStorage(officeId, bytes.length);
+        }
         StoredDocument d = new StoredDocument();
         d.setId(documents.collection(officeId).document().getId());
         applyMeta(user, d, meta);
@@ -369,6 +377,9 @@ public class DocumentService {
         documents.save(officeId, d);
         versions.save(officeId, v);
         log(user, d, "UPLOAD");
+        if (license != null) {
+            license.addStorage(officeId, bytes.length);
+        }
         readContent(officeId, d, bytes);
         audit.record(user, "DOCUMENT_UPLOADED", "document", d.getId(), d.getCategory().label() + ": " + d.getTitle(),
                 Map.of("sha256", file.sha256(), "size", String.valueOf(file.size()), "confidential", String.valueOf(d.isConfidential())));
@@ -384,11 +395,17 @@ public class DocumentService {
         if (file.sha256().equals(d.getSha256())) {
             throw new BusinessException("SAME_CONTENT", "O arquivo enviado é idêntico à versão atual.");
         }
+        if (license != null) {
+            license.assertStorage(user.officeId(), bytes.length);
+        }
         int next = d.getCurrentVersion() + 1;
         DocumentVersion v = putVersion(user, d, next, bytes, file, note == null || note.isBlank() ? null : note.trim());
         documents.save(user.officeId(), d);
         versions.save(user.officeId(), v);
         log(user, d, "NEW_VERSION");
+        if (license != null) {
+            license.addStorage(user.officeId(), bytes.length);
+        }
         readContent(user.officeId(), d, bytes);
         audit.record(user, "DOCUMENT_VERSION_ADDED", "document", id, "Versão " + next + " de " + d.getTitle(),
                 Map.of("sha256", file.sha256()));
@@ -623,4 +640,7 @@ public class DocumentService {
         audit.record(user, "DOCUMENT_OCR_REQUESTED", "document", id, "Leitura do conteúdo reprocessada: " + d.getTitle());
         return ocr.view(user.officeId(), load(user, id));
     }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private br.com.erpadv.services.platform.LicenseService license;
 }

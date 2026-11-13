@@ -10,10 +10,11 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { debounceTime } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
 import { CaseStatus, LegalArea, LegalCase } from '../../core/models/models';
+import { OfficeService } from '../settings/office.service';
 import { ToastService } from '../../core/services/toast.service';
 import { EmptyStateComponent, PageHeaderComponent } from '../../shared/components/ui';
 import { AREA_LABELS, CASE_STATUS_LABELS, CASE_STATUS_TONE, enumOptions } from '../../shared/labels';
@@ -70,6 +71,15 @@ import { CasesService } from './cases.service';
               }
             </mat-select>
           </mat-form-field>
+          @if (units().length) {
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Unidade</mat-label>
+              <mat-select formControlName="unitId">
+                <mat-option value="">Todas</mat-option>
+                @for (u of units(); track u.id) { <mat-option [value]="u.id">{{ u.name }}</mat-option> }
+              </mat-select>
+            </mat-form-field>
+          }
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Advogado</mat-label>
             <mat-select formControlName="responsibleUid">
@@ -208,9 +218,11 @@ export class CasesListComponent {
     status: ['' as CaseStatus | ''],
     area: ['' as LegalArea | ''],
     responsibleUid: [''],
+    unitId: [inject(ActivatedRoute).snapshot.queryParamMap.get('unidade') ?? ''],
     court: [''],
     includeArchived: [false],
   });
+  readonly units = inject(OfficeService).unitOptions();
 
   constructor() {
     this.filters.valueChanges.pipe(debounceTime(350), takeUntilDestroyed()).subscribe(() => this.fetch(null));

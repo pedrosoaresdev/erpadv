@@ -54,11 +54,12 @@ public class CaseController {
                                          @RequestParam(required = false) LegalArea area,
                                          @RequestParam(required = false) String responsibleUid,
                                          @RequestParam(required = false) String court,
+                                         @RequestParam(required = false) String unitId,
                                          @RequestParam(required = false) String clientId,
                                          @RequestParam(defaultValue = "false") boolean includeArchived,
                                          @RequestParam(required = false) String cursor,
                                          @RequestParam(defaultValue = "20") int size) {
-        CaseFilter filter = new CaseFilter(search, status, area, responsibleUid, court, clientId, includeArchived);
+        CaseFilter filter = new CaseFilter(search, status, area, responsibleUid, court, clientId, includeArchived, unitId);
         return cases.list(user, filter, cursor, size);
     }
 
@@ -119,10 +120,11 @@ public class CaseController {
                                          @RequestParam(required = false) LegalArea area,
                                          @RequestParam(required = false) String responsibleUid,
                                          @RequestParam(required = false) String court,
+                                         @RequestParam(required = false) String unitId,
                                          @RequestParam(defaultValue = "false") boolean includeArchived,
                                          @RequestParam(required = false) List<String> ids,
                                          @RequestParam(defaultValue = "xlsx") String format) {
-        CaseFilter filter = new CaseFilter(search, status, area, responsibleUid, court, null, includeArchived);
+        CaseFilter filter = new CaseFilter(search, status, area, responsibleUid, court, null, includeArchived, unitId);
         return DashboardController.file(insights.export(user, filter, ids, format));
     }
 

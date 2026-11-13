@@ -100,7 +100,11 @@ public class DashboardService {
 
     /** Exportação do painel em PDF ou Excel (indicadores financeiros só para quem pode vê-los). */
     public ReportExporter.Exported export(AuthenticatedUser user, LocalDate from, LocalDate to, String lawyerUid, String format) {
-        DashboardResponse d = get(user, from, to, lawyerUid);
+        return export(user, from, to, lawyerUid, null, format);
+    }
+
+    public ReportExporter.Exported export(AuthenticatedUser user, LocalDate from, LocalDate to, String lawyerUid, String unitId, String format) {
+        DashboardResponse d = get(user, from, to, lawyerUid, unitId);
         FinanceSummary finance = user.has(Permission.FINANCE_DASHBOARD_VIEW) && user.has(Permission.FINANCE_READ)
                 ? financeReports.summary(user, null, d.from(), d.to()) : null;
         String officeName = offices.findById(user.officeId()).map(Office::getName).orElse("Escritório");
@@ -178,6 +182,11 @@ public class DashboardService {
     }
 
     public DashboardResponse get(AuthenticatedUser user, LocalDate from, LocalDate to, String lawyerUid) {
+        return get(user, from, to, lawyerUid, null);
+    }
+
+    /** Filtro por unidade/filial: considera os integrantes vinculados à unidade como responsáveis. */
+    public DashboardResponse get(AuthenticatedUser user, LocalDate from, LocalDate to, String lawyerUid, String unitId) {
         String officeId = user.requireOffice();
         LocalDate today = LocalDate.now(ZONE);
         LocalDate end = to == null ? today : to;
@@ -192,12 +201,20 @@ public class DashboardService {
         if (lawyer != null && users.findInOffice(officeId, lawyer).isEmpty()) {
             throw new BusinessException("INVALID_LAWYER", "Advogado não encontrado no escritório.");
         }
-        String key = officeId + "|" + start + "|" + end + "|" + lawyer;
+        List<String> unitUids = null;
+        if (unitId != null && !unitId.isBlank()) {
+            units.get(officeId, unitId);
+            unitUids = units.memberUids(officeId, unitId);
+            if (unitUids.size() > 30) {
+                unitUids = unitUids.subList(0, 30);
+            }
+        }
+        String key = officeId + "|" + start + "|" + end + "|" + lawyer + "|" + unitId;
         CacheEntry cached = cache.get(key);
         if (cached != null && cached.expiresAt().isAfter(Instant.now())) {
             return cached.response();
         }
-        DashboardResponse response = compute(officeId, start, end, lawyer);
+        DashboardResponse response = compute(officeId, start, end, lawyer, unitUids);
         if (cache.size() > 1000) {
             cache.clear();
         }
@@ -205,12 +222,13 @@ public class DashboardService {
         return response;
     }
 
-    private DashboardResponse compute(String officeId, LocalDate start, LocalDate end, String lawyer) {
+    private DashboardResponse compute(String officeId, LocalDate start, LocalDate end, String lawyer, List<String> unitUids) {
+        List<String> scope = unitUids == null ? null : unitUids.isEmpty() ? List.of("__sem_integrantes__") : unitUids;
         CollectionReference clCol = clients.collection(officeId);
         CollectionReference csCol = cases.collection(officeId);
         // Filtro por advogado: clientes, processos, prazos, audiências e contratos sob sua responsabilidade.
-        Query cl = lawyer == null ? clCol : clCol.whereEqualTo("responsibleUid", lawyer);
-        Query cs = lawyer == null ? csCol : csCol.whereEqualTo("responsibleUid", lawyer);
+        Query cl = lawyer != null ? clCol.whereEqualTo("responsibleUid", lawyer) : scope != null ? clCol.whereIn("responsibleUid", scope) : clCol;
+        Query cs = lawyer != null ? csCol.whereEqualTo("responsibleUid", lawyer) : scope != null ? csCol.whereIn("responsibleUid", scope) : csCol;
         long periodStart = startOfDay(start);
         long periodEnd = startOfDay(end.plusDays(1));
 
@@ -240,8 +258,9 @@ public class DashboardService {
         // Prazos e audiências (Etapa 9)
         CollectionReference dlCol = deadlines.collection(officeId);
         CollectionReference apCol = appointments.collection(officeId);
-        Query dl = lawyer == null ? dlCol : dlCol.whereEqualTo("responsibleUid", lawyer);
-        Query ap = lawyer == null ? apCol : apCol.whereArrayContains("responsibleUids", lawyer);
+        Query dl = lawyer != null ? dlCol.whereEqualTo("responsibleUid", lawyer) : scope != null ? dlCol.whereIn("responsibleUid", scope) : dlCol;
+        Query ap = lawyer != null ? apCol.whereArrayContains("responsibleUids", lawyer)
+                : scope != null ? apCol.whereArrayContainsAny("responsibleUids", scope) : apCol;
         LocalDate today = LocalDate.now(ZONE);
         String t = today.toString();
         String urgentLimit = today.plusDays(DeadlineDtos.URGENT_DAYS).toString();
@@ -255,7 +274,7 @@ public class DashboardService {
                 .whereGreaterThanOrEqualTo("dueDate", start.toString())
                 .whereLessThanOrEqualTo("dueDate", end.toString()).count().get());
         CollectionReference ctCol = csCol.getParent().collection("contracts");
-        Query ct = lawyer == null ? ctCol : ctCol.whereEqualTo("responsibleUid", lawyer);
+        Query ct = lawyer != null ? ctCol.whereEqualTo("responsibleUid", lawyer) : scope != null ? ctCol.whereIn("responsibleUid", scope) : ctCol;
         f.put("ct.active", ct.whereEqualTo("status", "ATIVO").count().get());
         f.put("ct.draft", ct.whereEqualTo("status", "RASCUNHO").count().get());
         f.put("ct.expiring", ct.whereEqualTo("status", "ATIVO").whereGreaterThanOrEqualTo("endDate", t)
@@ -295,7 +314,7 @@ public class DashboardService {
         }
 
         List<UserProfile> lawyers = users.activeStaff(officeId).stream().filter(u -> u.getRole().isLawyer())
-                .filter(u -> lawyer == null || u.getId().equals(lawyer)).toList();
+                .filter(u -> lawyer == null || u.getId().equals(lawyer)).filter(u -> scope == null || scope.contains(u.getId())).toList();
         for (UserProfile member : lawyers) {
             f.put("lawyer." + member.getId(), csCol.whereEqualTo("responsibleUid", member.getId())
                     .whereEqualTo("archived", false).count().get());
@@ -444,4 +463,7 @@ public class DashboardService {
     private static long startOfDay(LocalDate date) {
         return date.atStartOfDay(ZONE).toInstant().toEpochMilli();
     }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private br.com.erpadv.services.platform.UnitService units;
 }

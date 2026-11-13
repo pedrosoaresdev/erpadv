@@ -47,6 +47,12 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: 'Sistemas',
+    items: [
+      { label: 'PJe e tribunais', icon: 'gavel', route: '/sistemas' },
+    ],
+  },
+  {
     title: 'Atendimento ao cliente',
     items: [
       { label: 'Recibos', icon: 'receipt_long', route: '/recibos', anyPermission: ['FINANCE_READ', 'DOCUMENTS_READ'] },
@@ -61,14 +67,15 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Auditoria', icon: 'verified_user', route: '/auditoria', permission: 'AUDIT_READ' },
       { label: 'Segurança', icon: 'shield_lock', route: '/seguranca' },
       { label: 'LGPD', icon: 'privacy_tip', route: '/lgpd', permission: 'LGPD_MANAGE' },
-      { label: 'Configurações', icon: 'settings', permission: 'SETTINGS_MANAGE', phase: 6 },
-      { label: 'Plano e Assinatura', icon: 'workspace_premium', permission: 'SETTINGS_MANAGE', phase: 6 },
+      { label: 'Configurações', icon: 'settings', route: '/configuracoes', permission: 'SETTINGS_MANAGE' },
+      { label: 'Plano e Assinatura', icon: 'workspace_premium', route: '/plano', permission: 'SETTINGS_MANAGE' },
+      { label: 'Suporte', icon: 'support_agent', route: '/suporte' },
     ],
   },
   {
     title: 'Plataforma',
     items: [
-      { label: 'Escritórios', icon: 'domain', route: '/plataforma', permission: 'PLATFORM_ADMIN' },
+      { label: 'Painel da plataforma', icon: 'domain', route: '/plataforma', permission: 'PLATFORM_ADMIN' },
     ],
   },
 ];

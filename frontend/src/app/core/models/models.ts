@@ -186,6 +186,8 @@ export interface LegalCase {
   subject: string | null;
   responsibleUid: string;
   responsibleName: string;
+  unitId?: string | null;
+  unitName?: string | null;
   claimValueCents: number | null;
   distributionDate: string | null;
   status: CaseStatus;
@@ -245,6 +247,7 @@ export interface CaseRequest {
   secondarySubjects?: string[];
   freeJustice?: boolean;
   phase?: CasePhase | null;
+  unitId?: string | null;
 }
 
 export interface CaseMovement {

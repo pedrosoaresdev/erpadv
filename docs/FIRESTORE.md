@@ -17,13 +17,19 @@ auditoria). Campos comuns a todas as entidades:
 | Coleção | Documento | Principais campos |
 |---|---|---|
 | `users/{uid}` | perfil do usuário | `officeId`, `email`, `displayName`, `role` (papel-base), `customRoleId`/`customRoleName` (cargo do escritório), `status` (`ACTIVE`/`BLOCKED`/`INVITED`), `permissionsGranted[]`, `permissionsRevoked[]`, `oabNumber`, `cpfEnc`/`cpfHash`/`cpfMasked`, `phone`, `clientId` (portal), `lastLoginAt`, `tokensRevokedAt` |
-| `offices/{officeId}` | escritório (tenant) | `name`, `nameLower`, `cnpj`, `ownerUid`, `plan` (`ESSENCIAL`/`PROFISSIONAL`/`ENTERPRISE`), `maxUsers`, `status` (`ACTIVE`/`SUSPENDED`), `suspendedAt`, `suspendedReason`, `createdByPlatform` |
+| `offices/{officeId}` | escritório (tenant) | `name`, `nameLower`, `cnpj`, `ownerUid`, `plan` (código do plano), `maxUsers`, `status` (`ACTIVE`/`SUSPENDED`), `suspendedAt`, `suspendedReason`, `createdByPlatform`; configurações: `address`, `website`, `oabRegistration`, `logoPath`/`logoContentType`/`logoUpdatedAt`, `disabledModules[]`, `onboardingDismissed`, `systemLinks[]` (`id`, `name`, `url` https, `court`, `description`); assinatura: `subscriptionStatus` (`TRIAL`/`ATIVA`/`EM_ATRASO`/`SUSPENSA`/`CANCELADA`; ausente = escritório anterior à Fase 6, com todos os módulos), `billingCycle` (`MENSAL`/`ANUAL`), `trialEndsAt`, `nextInvoiceDate`, `priceOverrideCents`, `billingEmail`, `graceDays`, `maxStorageMb`, `billingSuspended`, `storageBytes` (contador incremental) |
+| `plans/{code}` | planos comercializados | `code`, `name`, `description`, `monthlyPriceCents`/`yearlyPriceCents` (nulo = sem preço, não fatura), `maxUsers` (nulo = ilimitado), `maxStorageMb`, `modules[]` (`FINANCEIRO`, `CONTRATOS`, `CRM`, `QUADROS`, `RELATORIOS`, `LGPD`), `trialDays`, `active`, `highlight`, `sortOrder` |
+| `subscription_invoices/{id}` | faturas da assinatura | `officeId`, `number` (FAT-AAAA-NNNNN), `officeName`, `planCode`/`planName`, `cycle`, `periodStart`/`periodEnd`, `amountCents`, `dueDate`, `status` (`ABERTA`/`VENCIDA`/`PAGA`/`CANCELADA`), `paidDate`, `paidAmountCents`, `paymentMethod`, `note`, `markedByName`, `cancelReason` |
+| `support_tickets/{id}` | chamados de suporte | `officeId`, `number` (SUP-AAAA-NNNNN), `officeName`, `subject`, `category`, `priority`, `status` (`ABERTO`/`EM_ATENDIMENTO`/`AGUARDANDO_ESCRITORIO`/`RESOLVIDO`), `openedByUid`/`Name`/`Email`, `awaitingPlatform`, `lastMessageAt`, `messages[]` (`at`, `authorName`, `fromPlatform`, `text`) |
+| `platform_settings/billing` | dados de cobrança da plataforma | `issuerName`, `issuerDocument`, `pixKey`, `bankInfo`, `instructions`, `contactEmail` |
+| `platform_counters/{série-ano}` | numeração das faturas e chamados | `value` (transação) |
 | `permissions/{code}` | catálogo de permissões | `module`, `description` (gerado a partir do enum do backend) |
 
 ## Subcoleções por escritório (`offices/{officeId}/…`)
 
 | Coleção | Uso | Campos-chave |
 |---|---|---|
+| `units` | unidades/filiais | `name`, `cnpj`, `phone`, `email`, `address`, `managerUid`/`managerName`, `active` (integrantes: `users.unitId`; processos: `cases.unitId`/`unitName`) |
 | `roles` | cargos personalizados (ex.: Advogado júnior) | `name`, `nameLower`, `description`, `color`, `baseRole`, `permissions[]` |
 | `boards` | quadros Kanban | `name`, `color`, `visibility` (`OFFICE`/`MEMBERS`), `ownerUid`, `memberUids[]`, `columns[]` (`id`, `name`, `wipLimit`, `done`, `automation{notifyAssignees, addLabelId, assignUid, setDueInDays}`), `labels[]`, `archived` |
 | `board_cards` | cartões | `boardId`, `columnId`, `position` (fracionária), `title`, `assigneeUids[]`, `labelIds[]`, `priority`, `startDate`, `dueDate`, `completed`, `completedAt`, `checklist[]`, `clientId`, `caseId`, `deadlineId`, `columnEnteredAt`, `commentCount`, `archived` |
@@ -103,6 +109,7 @@ Definidos em `firebase/firestore.indexes.json`. Cada consulta paginada do backen
 offices/{officeId}/documents/{documentId}/v{versao}/{nomeSanitizado}
 offices/{officeId}/clients/{clientId}/...
 offices/{officeId}/finance/{transactionId}/{uuid}-{nome}   (comprovantes)
+offices/{officeId}/branding/logo.{png|jpg}                   (logotipo, até 1 MB)
 ```
 As Storage Rules negam leitura e escrita a qualquer cliente; os arquivos só trafegam pelo
 backend (upload validado por tipo, tamanho e assinatura binária; download auditado).

@@ -52,4 +52,7 @@ public class UserProfile extends BaseEntity {
     private long mfaLastStep;
     private int mfaFailedAttempts;
     private Instant mfaLockedUntil;
+    // ---- unidade/filial (Fase 6)
+    private String unitId;
+    private String unitName;
 }

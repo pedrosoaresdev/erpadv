@@ -30,11 +30,15 @@ public class PermissionResolver {
             return Set.of();
         }
         Optional<CustomRole> custom = customRole(profile.getOfficeId(), profile.getCustomRoleId());
+        Set<Permission> perms;
         if (custom.isPresent() && profile.getRole() != Role.CLIENTE) {
-            return RolePermissions.effectiveCustom(custom.get().getPermissions(),
+            perms = RolePermissions.effectiveCustom(custom.get().getPermissions(),
                     profile.getPermissionsGranted(), profile.getPermissionsRevoked());
+        } else {
+            perms = RolePermissions.effective(profile.getRole(), profile.getPermissionsGranted(), profile.getPermissionsRevoked());
         }
-        return RolePermissions.effective(profile.getRole(), profile.getPermissionsGranted(), profile.getPermissionsRevoked());
+        // módulos fora do plano contratado (ou desligados pelo escritório) não liberam permissões
+        return license == null || profile.getOfficeId() == null ? perms : license.restrict(profile.getOfficeId(), perms);
     }
 
     public Optional<CustomRole> customRole(String officeId, String roleId) {
@@ -47,4 +51,8 @@ public class PermissionResolver {
     public void evict(String officeId, String roleId) {
         cache.evict(officeId + "/" + roleId);
     }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    private br.com.erpadv.services.platform.LicenseService license;
 }

@@ -21,6 +21,7 @@ import { saveBlob } from '../finance/finance.service';
 import { CaseFormDialogComponent } from './case-form-dialog';
 import { CasesService } from './cases.service';
 import { ApiService } from '../../core/api/api.service';
+import { SystemLink, openSystem } from '../systems/systems';
 import { MovementDialogComponent } from './movement-dialog';
 
 const DEADLINE_STATUS: Record<string, string> = { PENDENTE: 'Pendente', CONCLUIDO: 'Cumprido', CANCELADO: 'Cancelado' };
@@ -56,6 +57,10 @@ const TX_STATUS: Record<string, string> = { ABERTO: 'Em aberto', PAGO: 'Pago', C
             </div>
           </div>
           <div class="hero-actions">
+            @if (courtSystem(); as sys) {
+              <button mat-stroked-button (click)="openCourtSystem(sys)" [matTooltip]="'Copia o número do processo e abre ' + sys.name + ' numa janela ao lado'">
+                <mat-icon>gavel</mat-icon>Abrir no {{ sys.name.toLowerCase().includes('pje') ? 'PJe' : 'sistema do tribunal' }}</button>
+            }
             @if (auth.has('CASES_WRITE') && !p.archived) {
               <button mat-stroked-button (click)="edit()"><mat-icon>edit</mat-icon>Editar</button>
               <button mat-flat-button (click)="addMovement()"><mat-icon>post_add</mat-icon>Andamento</button>
@@ -428,6 +433,12 @@ export class CaseDetailComponent {
   readonly txStatus = TX_STATUS;
 
   readonly legalCase = signal<LegalCase | null>(null);
+  /** Sistema do tribunal do processo (lista de Sistemas do escritório), para abrir o PJe a partir daqui. */
+  private readonly systemLinks = signal<SystemLink[]>([]);
+  readonly courtSystem = computed(() => {
+    const court = (this.legalCase()?.court ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return court ? this.systemLinks().find((s) => (s.court ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '') === court) ?? null : null;
+  });
   readonly movements = signal<CaseMovement[]>([]);
   readonly cursor = signal<string | null>(null);
   readonly related = signal<CaseRelated | null>(null);
@@ -448,6 +459,7 @@ export class CaseDetailComponent {
   });
 
   constructor() {
+    inject(ApiService).get<SystemLink[]>('/office/systems', undefined, true).subscribe({ next: (l) => this.systemLinks.set(l), error: () => undefined });
     effect(() => {
       const id = this.id();
       this.legalCase.set(null);
@@ -612,5 +624,14 @@ export class CaseDetailComponent {
         }
       });
     });
+  }
+
+  /** Copia o número CNJ e abre o sistema do tribunal numa janela ao lado (login do próprio tribunal). */
+  openCourtSystem(sys: SystemLink): void {
+    const cnj = this.legalCase()?.cnjNumber;
+    if (cnj) {
+      void navigator.clipboard.writeText(cnj).then(() => this.toast.info(`Número ${cnj} copiado: cole na consulta do ${sys.name}.`)).catch(() => undefined);
+    }
+    openSystem(sys.url);
   }
 }

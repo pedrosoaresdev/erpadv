@@ -127,8 +127,13 @@ public class AuthService {
         office.setCity(req.city());
         office.setState(req.state());
         office.setOwnerUid(user.uid());
-        office.setPlan("PROFISSIONAL");
         office.setStatus("ACTIVE");
+        // novo escritório: avaliação gratuita com todos os módulos; depois a plataforma define o plano contratado
+        office.setPlan(trialPlan);
+        office.setSubscriptionStatus("TRIAL");
+        office.setBillingCycle("MENSAL");
+        office.setGraceDays(10);
+        office.setTrialEndsAt(java.time.LocalDate.now(br.com.erpadv.services.CourtCalendarService.ZONE).plusDays(trialDays));
         office.setCreatedAt(now);
         office.setUpdatedAt(now);
         office.setCreatedBy(user.uid());
@@ -170,4 +175,9 @@ public class AuthService {
             throw new DataAccessFailure("Não foi possível atualizar as credenciais do usuário.", e);
         }
     }
+
+    @org.springframework.beans.factory.annotation.Value("${app.billing.trial-plan:ENTERPRISE}")
+    private String trialPlan;
+    @org.springframework.beans.factory.annotation.Value("${app.billing.trial-days:14}")
+    private int trialDays;
 }

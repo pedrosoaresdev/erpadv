@@ -353,11 +353,15 @@ public class EmployeeService {
 
     /** Limite de usuários do plano (definido no painel master). */
     void assertSeat(Office office) {
-        if (office.getMaxUsers() != null && users.countSeats(office.getId()) >= office.getMaxUsers()) {
-            throw new BusinessException("SEAT_LIMIT", "Limite de " + office.getMaxUsers()
+        Integer max = license == null ? office.getMaxUsers() : license.maxUsers(office);
+        if (max != null && users.countSeats(office.getId()) >= max) {
+            throw new BusinessException("SEAT_LIMIT", "Limite de " + max
                     + " usuários do plano atingido. Fale com o suporte da plataforma para ampliar.");
         }
     }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private br.com.erpadv.services.platform.LicenseService license;
 
     private UserProfile load(AuthenticatedUser actor, String uid) {
         return users.findInOffice(actor.requireOffice(), uid).orElseThrow(() -> new NotFoundException("Usuário"));

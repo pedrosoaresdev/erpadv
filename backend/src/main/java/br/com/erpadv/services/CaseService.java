@@ -97,6 +97,9 @@ public class CaseService {
         if (notBlank(filter.clientId())) {
             query = query.whereEqualTo("clientId", filter.clientId());
         }
+        if (notBlank(filter.unitId())) {
+            query = query.whereEqualTo("unitId", filter.unitId());
+        }
         return cases.page(query, "createdAt", Query.Direction.DESCENDING, cursor, size).map(CaseResponse::of);
     }
 
@@ -183,7 +186,7 @@ public class CaseService {
                 null, CaseStatus.EM_ANDAMENTO, "Cadastro duplicado de " + (source.getCnjNumber() == null ? "processo sem número" : source.getCnjNumber())
                 + (source.getNotes() == null ? "" : "\n\n" + source.getNotes()), source.isConfidential(),
                 source.getActiveParty(), source.getPassiveParty(), source.getInstance(), source.getJudgingBody(),
-                source.getSecondarySubjects(), source.isFreeJustice(), source.getPhase());
+                source.getSecondarySubjects(), source.isFreeJustice(), source.getPhase(), source.getUnitId());
         CaseResponse created = create(user, req);
         audit.record(user, "CASE_DUPLICATED", "case", created.id(), "Processo duplicado a partir de " + id, Map.of("sourceId", id));
         return created;
@@ -349,6 +352,17 @@ public class CaseService {
 
     private void apply(AuthenticatedUser user, LegalCase c, CaseRequest req, String cnj) {
         String officeId = user.officeId();
+        if (notBlank(req.unitId())) {
+            var unit = br.com.erpadv.firebase.Futures.await(cases.collection(officeId).getParent().collection("units").document(req.unitId()).get());
+            if (!unit.exists()) {
+                throw new br.com.erpadv.exceptions.BusinessException("INVALID_UNIT", "Unidade não encontrada.");
+            }
+            c.setUnitId(req.unitId());
+            c.setUnitName(unit.getString("name"));
+        } else {
+            c.setUnitId(null);
+            c.setUnitName(null);
+        }
         boolean restricted = req.area() == LegalArea.CRIMINAL || req.confidential();
         if (restricted && !user.has(Permission.CRIMINAL_WRITE)) {
             throw new ForbiddenException("CRIMINAL_ACCESS_DENIED",

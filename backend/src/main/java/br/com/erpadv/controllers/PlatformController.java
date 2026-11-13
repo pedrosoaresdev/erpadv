@@ -33,9 +33,105 @@ import org.springframework.web.bind.annotation.RestController;
 public class PlatformController {
 
     private final PlatformService platform;
+    @org.springframework.beans.factory.annotation.Autowired
+    private br.com.erpadv.services.platform.BillingService billing;
+    @org.springframework.beans.factory.annotation.Autowired
+    private br.com.erpadv.services.platform.SupportService support;
+    @org.springframework.beans.factory.annotation.Autowired
+    private br.com.erpadv.services.platform.MonitoringService monitoring;
+
+    public record ReasonRequest(String reason) {
+    }
 
     public PlatformController(PlatformService platform) {
         this.platform = platform;
+    }
+
+    // ------------------------------------------------------------------ planos, assinaturas e faturas (cobrança manual)
+
+    @GetMapping("/plans")
+    public java.util.List<br.com.erpadv.models.Plan> plans() {
+        return billing.plans();
+    }
+
+    @org.springframework.web.bind.annotation.PutMapping("/plans")
+    public br.com.erpadv.models.Plan savePlan(@AuthenticationPrincipal AuthenticatedUser master, @RequestBody br.com.erpadv.services.platform.BillingService.PlanRequest req) {
+        return billing.savePlan(master, req);
+    }
+
+    @GetMapping("/offices/{officeId}/subscription")
+    public br.com.erpadv.services.platform.BillingService.SubscriptionView subscription(@PathVariable String officeId) {
+        return billing.view(officeId);
+    }
+
+    @org.springframework.web.bind.annotation.PutMapping("/offices/{officeId}/subscription")
+    public br.com.erpadv.services.platform.BillingService.SubscriptionView updateSubscription(@AuthenticationPrincipal AuthenticatedUser master, @PathVariable String officeId,
+                                                               @RequestBody br.com.erpadv.services.platform.BillingService.SubscriptionRequest req) {
+        return billing.updateSubscription(master, officeId, req);
+    }
+
+    @PostMapping("/offices/{officeId}/invoices")
+    @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+    public br.com.erpadv.models.SubscriptionInvoice issueInvoice(@AuthenticationPrincipal AuthenticatedUser master, @PathVariable String officeId) {
+        return billing.issueNow(master, officeId);
+    }
+
+    @GetMapping("/invoices")
+    public java.util.List<br.com.erpadv.models.SubscriptionInvoice> invoices(
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String officeId,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) br.com.erpadv.models.SubscriptionInvoice.Status status) {
+        return billing.list(officeId, status);
+    }
+
+    @PostMapping("/invoices/{id}/pay")
+    public br.com.erpadv.models.SubscriptionInvoice pay(@AuthenticationPrincipal AuthenticatedUser master, @PathVariable String id,
+                                                        @RequestBody br.com.erpadv.services.platform.BillingService.PaymentRequest req) {
+        return billing.markPaid(master, id, req);
+    }
+
+    @PostMapping("/invoices/{id}/cancel")
+    public br.com.erpadv.models.SubscriptionInvoice cancelInvoice(@AuthenticationPrincipal AuthenticatedUser master, @PathVariable String id,
+                                                                  @RequestBody ReasonRequest req) {
+        return billing.cancel(master, id, req.reason());
+    }
+
+    @GetMapping("/invoices/{id}/pdf")
+    public org.springframework.http.ResponseEntity<byte[]> invoicePdf(@AuthenticationPrincipal AuthenticatedUser master, @PathVariable String id) {
+        return DashboardController.file(billing.pdf(billing.invoiceOf(master, id)));
+    }
+
+    @PostMapping("/billing/run")
+    public java.util.Map<String, Integer> runBilling() {
+        return java.util.Map.of("actions", billing.runDaily(java.time.LocalDate.now(br.com.erpadv.services.CourtCalendarService.ZONE)));
+    }
+
+    @GetMapping("/billing/settings")
+    public br.com.erpadv.services.platform.BillingService.BillingSettings billingSettings() {
+        return billing.settings();
+    }
+
+    @org.springframework.web.bind.annotation.PutMapping("/billing/settings")
+    public br.com.erpadv.services.platform.BillingService.BillingSettings saveBillingSettings(@RequestBody br.com.erpadv.services.platform.BillingService.BillingSettings s) {
+        return billing.saveSettings(s);
+    }
+
+    // ------------------------------------------------------------------ suporte e monitoramento
+
+    @GetMapping("/support/tickets")
+    public java.util.List<br.com.erpadv.models.SupportTicket> supportTickets(
+            @org.springframework.web.bind.annotation.RequestParam(required = false) br.com.erpadv.models.SupportTicket.Status status) {
+        return support.all(status);
+    }
+
+    @PostMapping("/support/tickets/{id}/reply")
+    public br.com.erpadv.models.SupportTicket supportReply(@AuthenticationPrincipal AuthenticatedUser master, @PathVariable String id,
+                                                           @RequestBody br.com.erpadv.services.platform.SupportService.ReplyRequest req) {
+        return support.platformReply(master, id, req);
+    }
+
+    @GetMapping("/monitoring")
+    public br.com.erpadv.services.platform.MonitoringService.Metrics monitoring() {
+        return monitoring.metrics();
     }
 
     @GetMapping("/offices")

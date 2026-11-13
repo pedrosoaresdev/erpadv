@@ -32,8 +32,9 @@ public class DashboardController {
     public DashboardResponse get(@AuthenticationPrincipal AuthenticatedUser user,
                                  @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
                                  @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-                                 @RequestParam(required = false) String lawyerUid) {
-        return dashboard.get(user, from, to, lawyerUid);
+                                 @RequestParam(required = false) String lawyerUid,
+                                 @RequestParam(required = false) String unitId) {
+        return dashboard.get(user, from, to, lawyerUid, unitId);
     }
 
     /** Exporta o painel (PDF ou Excel) com o mesmo período e filtro de advogado. */
@@ -43,8 +44,9 @@ public class DashboardController {
                                          @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
                                          @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
                                          @RequestParam(required = false) String lawyerUid,
+                                         @RequestParam(required = false) String unitId,
                                          @RequestParam(defaultValue = "pdf") String format) {
-        return file(dashboard.export(user, from, to, lawyerUid, format));
+        return file(dashboard.export(user, from, to, lawyerUid, unitId, format));
     }
 
     static ResponseEntity<byte[]> file(ReportExporter.Exported file) {

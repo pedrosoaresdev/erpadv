@@ -114,9 +114,16 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
             if (!master && officeStatus.isSuspended(officeId)) {
-                problems.write(response, HttpStatus.FORBIDDEN, "OFFICE_SUSPENDED",
-                        "Escritório suspenso. Entre em contato com o suporte da plataforma.");
-                return;
+                if (!officeStatus.isBillingSuspended(officeId)) {
+                    problems.write(response, HttpStatus.FORBIDDEN, "OFFICE_SUSPENDED",
+                            "Escritório suspenso. Entre em contato com o suporte da plataforma.");
+                    return;
+                }
+                if (!allowedWhileBillingSuspended(request)) {
+                    problems.write(response, HttpStatus.FORBIDDEN, "OFFICE_SUSPENDED_BILLING",
+                            "Acesso suspenso por falta de pagamento da assinatura. O administrador do escritório pode regularizar em Plano e Assinatura.");
+                    return;
+                }
             }
             // O papel vigente é o do perfil (claims podem estar defasados até a renovação do token).
             role = profile.getRole() != null ? profile.getRole() : role;
@@ -193,6 +200,20 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
             return false;
         }
         return token.isEmailVerified() || !properties.security().requireEmailVerified();
+    }
+
+    /** Com a suspensão por cobrança, só o necessário para regularizar: sessão, situação do escritório, assinatura e suporte. */
+    static boolean allowedWhileBillingSuspended(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        String ctx = request.getContextPath();
+        if (ctx != null && !ctx.isEmpty() && path.startsWith(ctx)) {
+            path = path.substring(ctx.length());
+        }
+        boolean get = "GET".equalsIgnoreCase(request.getMethod());
+        return path.equals("/api/auth/me")
+                || path.equals("/api/subscription") || path.startsWith("/api/subscription/")
+                || path.equals("/api/support/tickets") || path.startsWith("/api/support/tickets/")
+                || (get && (path.equals("/api/office") || path.equals("/api/office/logo")));
     }
 
     private boolean isRevoked(Map<String, Object> claims, UserProfile profile) {

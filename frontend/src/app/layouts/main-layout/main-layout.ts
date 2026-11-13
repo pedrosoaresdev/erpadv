@@ -18,6 +18,7 @@ import { RelativeTimePipe } from '../../shared/pipes/format.pipes';
 import { GlobalSearchComponent } from './global-search';
 import { IdleService } from '../../core/services/idle.service';
 import { MOBILE_SHORTCUTS, NAV_SECTIONS, NavItem } from './nav-items';
+import { OfficeService } from '../../modules/settings/office.service';
 
 const COLLAPSE_KEY = 'erpadv.sidebar.collapsed';
 
@@ -35,6 +36,26 @@ export class MainLayoutComponent {
   readonly theme = inject(ThemeService);
   readonly notifications = inject(NotificationService);
   readonly push = inject(PushService);
+  readonly office = inject(OfficeService);
+
+  /** Aviso de assinatura para quem administra o escritório: avaliação terminando ou fatura em atraso. */
+  readonly billingBanner = computed(() => {
+    const s = this.office.status();
+    if (!s || !this.auth.has('SETTINGS_MANAGE')) return null;
+    if (s.subscriptionStatus === 'SUSPENSA') {
+      return { tone: 'danger', text: 'Acesso da equipe suspenso por falta de pagamento. Após a confirmação do pagamento o acesso é liberado.' };
+    }
+    if (s.subscriptionStatus === 'EM_ATRASO') {
+      return { tone: 'danger', text: 'Há fatura da assinatura vencida. Regularize para evitar a suspensão do acesso da equipe.' };
+    }
+    if (s.subscriptionStatus === 'TRIAL' && s.trialEndsAt) {
+      const days = Math.ceil((new Date(`${s.trialEndsAt}T23:59:59`).getTime() - Date.now()) / 86400000);
+      if (days <= 7) {
+        return { tone: 'warning', text: days <= 0 ? 'O período de avaliação termina hoje.' : `O período de avaliação termina em ${days} dia(s).` };
+      }
+    }
+    return null;
+  });
   private readonly router = inject(Router);
 
   readonly isMobile = toSignal(
@@ -65,6 +86,7 @@ export class MainLayoutComponent {
       const me = this.auth.me();
       if (me?.officeId) {
         this.notifications.start(me.officeId, me.uid);
+        this.office.loadStatus();
         void this.push.init();
       } else {
         this.notifications.stop();
